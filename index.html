@@ -6,19 +6,22 @@
   <title>ТАРО — карта дня</title>
   <!-- Telegram WebApp SDK -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <!-- taro-ui: компонентная библиотека (дефолтные стили TG) -->
-  <link rel="stylesheet" href="taro-ui.css">
-  <script src="taro-ui.js"></script>
+  <!-- taro-ui: компонентная библиотека -->
+  <link rel="stylesheet" href="taro-ui.css?v=4">
+  <!-- тема «Ночь и золото»: единый стиль с лендингом -->
+  <link rel="stylesheet" href="night.css?v=4">
+  <script src="taro-ui.js?v=4"></script>
   <style>
-    /* Минимальные обёртки экрана — всё остальное в taro-ui.css */
-    #screen { padding: 4px 12px; }
+    /* Минимальные обёртки экрана — всё остальное в taro-ui.css.
+       Низ: высота таб-бара (~58px) + safe-area iPhone + воздух. */
+    #screen { padding: 4px 12px calc(78px + env(safe-area-inset-bottom, 0px)); }
     .tui-btn { margin: 10px 0; }
     #screen > .tui-btn { margin-top: 14px; }
   </style>
 </head>
 <body>
   <div id="screen"></div>
-  <script src="config.js"></script>
-  <script src="app.js"></script>
+  <script src="config.js?v=4"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>

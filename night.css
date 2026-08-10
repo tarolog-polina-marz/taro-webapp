@@ -1,0 +1,505 @@
+/* night.css — тема «Ночь и золото» для ТАРО Mini App.
+   Подключается ПОСЛЕ taro-ui.css и переопределяет токены
+   --tg-theme-* + добавляет брендовую эстетику: шрифты
+   Cormorant Garamond / Manrope, золотое свечение, 3D-карта.
+   Единая дизайн-система с лендингом taro-polina.surge.sh. */
+
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Manrope:wght@400;500;600;700&display=swap');
+
+:root {
+  /* ── Палитра «Ночь и золото» ── */
+  --night-bg: #0d0c14;
+  --night-bg2: #14121f;
+  --night-card: #171428;
+  --night-ivory: #f1ede3;
+  --night-muted: #b7b1c8;
+  --night-gold: #d9a94e;
+  --night-gold-bright: #ecc46f;
+  --night-gold-dim: rgba(217, 169, 78, 0.14);
+  --night-line: rgba(217, 169, 78, 0.16);
+
+  /* ── Переопределение токенов Telegram ── */
+  --tg-theme-bg-color: var(--night-bg);
+  --tg-theme-secondary-bg-color: var(--night-bg2);
+  --tg-theme-text-color: var(--night-ivory);
+  --tg-theme-hint-color: var(--night-muted);
+  --tg-theme-link-color: var(--night-gold-bright);
+  --tg-theme-button-color: var(--night-gold);
+  --tg-theme-button-text-color: #171106;
+  --tg-theme-section-bg-color: var(--night-card);
+  --tg-theme-section-header-text-color: #8f87a8;
+  --tg-theme-section-separator-color: var(--night-line);
+  --tg-theme-subtitle-text-color: var(--night-muted);
+  --tg-theme-accent-text-color: var(--night-gold);
+  --tg-theme-destructive-text-color: #e5726a;
+
+  color-scheme: dark; /* нативные date-picker'ы в тёмной схеме */
+}
+
+/* ── Фон: ночь + звёздная пыль ── */
+html, body {
+  background:
+    radial-gradient(ellipse at 18% 8%, rgba(217, 169, 78, 0.055), transparent 42%),
+    radial-gradient(ellipse at 88% 78%, rgba(122, 92, 210, 0.07), transparent 48%),
+    var(--night-bg) !important;
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    radial-gradient(1px 1px at 22px 34px, rgba(241, 237, 227, 0.55), transparent 100%),
+    radial-gradient(1px 1px at 118px 92px, rgba(236, 196, 111, 0.5), transparent 100%),
+    radial-gradient(1.5px 1.5px at 196px 168px, rgba(241, 237, 227, 0.4), transparent 100%),
+    radial-gradient(1px 1px at 74px 214px, rgba(241, 237, 227, 0.35), transparent 100%),
+    radial-gradient(1px 1px at 244px 58px, rgba(236, 196, 111, 0.38), transparent 100%),
+    radial-gradient(1.5px 1.5px at 160px 16px, rgba(241, 237, 227, 0.3), transparent 100%);
+  background-size: 280px 280px;
+  opacity: 0.6;
+  pointer-events: none;
+  z-index: 0;
+  animation: night-twinkle 7s ease-in-out infinite alternate;
+}
+
+@keyframes night-twinkle {
+  from { opacity: 0.38; }
+  to { opacity: 0.68; }
+}
+
+#screen { position: relative; z-index: 1; }
+
+/* ── Хедер экрана ── */
+.tui-header-title {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 23px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+}
+.tui-header-back { color: var(--night-gold); }
+
+/* ── Заголовки секций ── */
+.tui-section-header {
+  letter-spacing: 1.6px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* ── Секции: появление ── */
+.tui-section-wrap { animation: night-rise 0.4s ease both; }
+.tui-section-wrap:nth-child(2) { animation-delay: 0.05s; }
+.tui-section-wrap:nth-child(3) { animation-delay: 0.1s; }
+.tui-section-wrap:nth-child(4) { animation-delay: 0.15s; }
+
+@keyframes night-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+.tui-section {
+  border: 1px solid rgba(217, 169, 78, 0.09);
+  perspective: 1000px; /* для 3D-переворота карты */
+}
+
+/* ── Строки ── */
+.tui-row-clickable:active { background: rgba(217, 169, 78, 0.07); }
+.tui-arrow { color: var(--night-gold); opacity: 0.7; }
+
+/* ── Кнопки ── */
+.tui-btn { border-radius: 12px; }
+.tui-btn-primary {
+  background: linear-gradient(160deg, #ecc46f, var(--night-gold) 45%, #b98a34);
+  color: #171106;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  box-shadow: 0 6px 22px rgba(217, 169, 78, 0.25);
+  transition: transform 0.12s ease, box-shadow 0.2s ease, opacity 0.15s;
+}
+.tui-btn-primary:active {
+  transform: translateY(1px) scale(0.99);
+  box-shadow: 0 3px 12px rgba(217, 169, 78, 0.3);
+}
+.tui-btn-secondary {
+  background: var(--night-gold-dim);
+  color: var(--night-gold-bright);
+  border: 1px solid var(--night-line);
+}
+.tui-btn-text { color: var(--night-gold-bright); }
+
+/* ── Карта таро: центр вселенной ── */
+.tui-tarot {
+  width: 205px;
+  min-height: 335px;
+  border-radius: 16px;
+  background:
+    radial-gradient(rgba(217, 169, 78, 0.10) 1px, transparent 1.4px) 0 0 / 14px 14px,
+    linear-gradient(163deg, #221c3d, #131022 55%, #1a1530);
+  border: 1px solid rgba(217, 169, 78, 0.42);
+  box-shadow:
+    0 18px 50px rgba(0, 0, 0, 0.55),
+    0 0 42px rgba(217, 169, 78, 0.13);
+  position: relative;
+  overflow: hidden;
+  transform-style: preserve-3d;
+  animation: night-card-in 0.75s cubic-bezier(0.2, 0.7, 0.3, 1.08) both;
+}
+
+/* внутренняя золотая рамка */
+.tui-tarot::before {
+  content: '';
+  position: absolute;
+  inset: 9px;
+  border: 1px solid rgba(217, 169, 78, 0.28);
+  border-radius: 10px;
+  pointer-events: none;
+}
+
+/* пробегающий блик */
+.tui-tarot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 16px;
+  background: linear-gradient(105deg, transparent 40%, rgba(236, 196, 111, 0.15) 50%, transparent 60%);
+  background-size: 250% 100%;
+  animation: night-shimmer 3.4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes night-card-in {
+  from { opacity: 0; transform: rotateY(-65deg) scale(0.92); }
+  to { opacity: 1; transform: rotateY(0) scale(1); }
+}
+
+@keyframes night-shimmer {
+  0% { background-position: 135% 0; }
+  60% { background-position: -35% 0; }
+  100% { background-position: -35% 0; }
+}
+
+.tui-tarot-inner { position: relative; z-index: 1; }
+.tui-tarot-star {
+  color: var(--night-gold-bright);
+  text-shadow: 0 0 22px rgba(236, 196, 111, 0.75);
+  animation: night-star-pulse 2.6s ease-in-out infinite;
+}
+@keyframes night-star-pulse {
+  0%, 100% { opacity: 0.85; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.12); }
+}
+.tui-tarot-name {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--night-gold-bright);
+  text-shadow: 0 0 18px rgba(236, 196, 111, 0.4);
+}
+.tui-tarot-pos, .tui-tarot-sphere { color: rgba(241, 237, 227, 0.82); }
+.tui-tarot-sphere {
+  letter-spacing: 1.5px;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+/* перевёрнутая карта */
+.tui-tarot-reversed { animation-name: night-card-in-reversed; }
+@keyframes night-card-in-reversed {
+  from { opacity: 0; transform: rotateY(-65deg) scale(0.92) rotate(0deg); }
+  to { opacity: 1; transform: rotateY(0) scale(1) rotate(180deg); }
+}
+
+/* ── Опции (radio) ── */
+.tui-option:active { background: rgba(217, 169, 78, 0.07); }
+.tui-option-selected { color: var(--night-gold-bright); }
+.tui-check { color: var(--night-gold); }
+
+/* ── Инпуты ── */
+.tui-input {
+  background: var(--night-bg2);
+  color: var(--night-ivory);
+  border: 1px solid var(--night-line);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.tui-input:focus {
+  border-color: rgba(217, 169, 78, 0.45);
+  box-shadow: 0 0 0 3px rgba(217, 169, 78, 0.12);
+}
+
+/* ── Бейджи ── */
+.tui-badge {
+  background: var(--night-gold-dim);
+  color: var(--night-muted);
+  border: 1px solid var(--night-line);
+}
+.tui-badge-active {
+  background: var(--night-gold);
+  color: #171106;
+  border-color: transparent;
+}
+
+/* ── Спиннер ── */
+.tui-spinner div {
+  border-color: rgba(217, 169, 78, 0.22);
+  border-top-color: var(--night-gold);
+}
+
+/* ── Хинт ── */
+.tui-hint { line-height: 1.45; }
+
+/* ── Тост ── */
+.tui-toast {
+  background: rgba(23, 20, 40, 0.96);
+  border: 1px solid var(--night-line);
+  color: var(--night-ivory);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+/* ── Пустое состояние ── */
+.tui-empty-title {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 20px;
+}
+
+/* ── Таб-бар ── */
+.tui-tabbar {
+  background: rgba(13, 12, 20, 0.92);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  border-top: 1px solid var(--night-line);
+}
+.tui-tab { color: #6f6988; }
+.tui-tab-active { color: var(--night-gold); }
+.tui-tab-active .tui-tab-icon {
+  text-shadow: 0 0 14px rgba(217, 169, 78, 0.55);
+}
+
+/* ════════════ v2: Главный экран — ритуал карты дня ════════════ */
+.home-greeting { text-align: center; padding: 8px 18px 4px; animation: night-rise 0.45s ease both; }
+.home-date {
+  font-size: 11px; letter-spacing: 2.2px; text-transform: uppercase;
+  color: var(--night-muted); margin-bottom: 8px;
+}
+.home-title {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 27px; font-weight: 600; color: var(--night-ivory); margin: 0 0 8px;
+}
+.home-sub { color: var(--night-muted); font-size: 14px; line-height: 1.5; margin: 0 auto; max-width: 300px; }
+
+.card-stage { display: flex; justify-content: center; padding: 26px 0 22px; perspective: 1200px; }
+
+/* Рубашка карты (до переворота) */
+.card-back-standalone {
+  width: 205px; min-height: 335px; border-radius: 16px;
+  display: flex; align-items: center; justify-content: center;
+  background:
+    radial-gradient(rgba(217, 169, 78, 0.10) 1px, transparent 1.4px) 0 0 / 14px 14px,
+    linear-gradient(163deg, #221c3d, #131022 55%, #1a1530);
+  border: 1px solid rgba(217, 169, 78, 0.42);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55), 0 0 42px rgba(217, 169, 78, 0.13);
+  animation: night-card-in 0.7s cubic-bezier(0.2, 0.7, 0.3, 1.05) both;
+  position: relative;
+}
+.card-back-standalone::before {
+  content: ''; position: absolute; inset: 9px;
+  border: 1px solid rgba(217, 169, 78, 0.28); border-radius: 10px;
+}
+.card-back-pattern {
+  font-size: 44px; color: var(--night-gold-bright);
+  text-shadow: 0 0 26px rgba(236, 196, 111, 0.7);
+  animation: night-star-pulse 2.6s ease-in-out infinite;
+}
+.card-back-standalone.shuffling { animation: card-shuffle 0.9s ease-in-out infinite; }
+@keyframes card-shuffle {
+  0%, 100% { transform: rotate(-1.5deg) translateY(0); }
+  25% { transform: rotate(1.2deg) translateY(-6px); }
+  50% { transform: rotate(-1deg) translateY(2px); }
+  75% { transform: rotate(1.5deg) translateY(-3px); }
+}
+
+/* 3D-переворот карты */
+.flip-card { width: 205px; min-height: 335px; transform-style: preserve-3d; transition: transform 0.9s cubic-bezier(0.25, 0.8, 0.3, 1); transform: rotateY(180deg); }
+.flip-card.flipped { transform: rotateY(0deg); }
+.flip-inner { position: relative; width: 100%; min-height: 335px; transform-style: preserve-3d; }
+.flip-back, .flip-front { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; border-radius: 16px; }
+.flip-back {
+  transform: rotateY(180deg);
+  display: flex; align-items: center; justify-content: center;
+  background:
+    radial-gradient(rgba(217, 169, 78, 0.10) 1px, transparent 1.4px) 0 0 / 14px 14px,
+    linear-gradient(163deg, #221c3d, #131022 55%, #1a1530);
+  border: 1px solid rgba(217, 169, 78, 0.42);
+}
+.flip-front { position: relative; transform: rotateY(0deg); }
+.flip-front .tui-tarot { animation: none; } /* переворот делает сам flip */
+.flip-front.card-reversed .tui-tarot { transform: rotate(180deg); }
+
+.tui-btn-glow { animation: btn-glow 2.4s ease-in-out infinite; }
+@keyframes btn-glow {
+  0%, 100% { box-shadow: 0 6px 22px rgba(217, 169, 78, 0.25); }
+  50% { box-shadow: 0 6px 34px rgba(217, 169, 78, 0.45), 0 0 24px rgba(236, 196, 111, 0.25); }
+}
+
+/* Мета-чипы под картой */
+.card-meta { display: flex; gap: 8px; justify-content: center; margin: 4px 0 18px; }
+.meta-chip {
+  font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--night-gold-bright); background: var(--night-gold-dim);
+  border: 1px solid var(--night-line); border-radius: 999px; padding: 5px 12px;
+}
+
+/* Трактовка */
+.interp-section {
+  margin: 0 16px 16px; padding: 18px;
+  background: var(--night-card); border: 1px solid rgba(217, 169, 78, 0.12); border-radius: 16px;
+  animation: night-rise 0.5s ease 0.15s both;
+}
+.interp-title {
+  font-size: 11px; letter-spacing: 2px; text-transform: uppercase;
+  color: #8f87a8; margin-bottom: 10px;
+}
+.interp-text { color: var(--night-ivory); font-size: 15px; line-height: 1.62; margin: 0; }
+.interp-text p { margin: 0 0 10px; }
+.interp-text p:last-child { margin-bottom: 0; }
+
+/* Оценка карты («совпало?») */
+.review-box {
+  margin: 0 16px 14px; padding: 16px;
+  background: rgba(217, 169, 78, 0.06); border: 1px solid var(--night-line); border-radius: 16px;
+  text-align: center; animation: night-rise 0.5s ease 0.25s both;
+}
+.review-q { color: var(--night-ivory); font-size: 14px; margin-bottom: 12px; }
+.review-btns { display: flex; gap: 10px; justify-content: center; }
+.review-btn {
+  flex: 1; max-width: 150px; padding: 11px 0; border-radius: 12px; font-size: 14px; font-weight: 600;
+  border: 1px solid var(--night-line); background: var(--night-bg2); color: var(--night-muted);
+  transition: all 0.15s;
+}
+.review-btn.yes { background: var(--night-gold-dim); color: var(--night-gold-bright); border-color: rgba(217, 169, 78, 0.35); }
+.review-btn:active { transform: scale(0.97); }
+.review-done { text-align: center; color: var(--night-muted); font-size: 13px; margin: 4px 0 14px; }
+
+.linklike { color: var(--night-gold-bright); cursor: pointer; }
+
+/* ════════════ v2: Онбординг-визард ════════════ */
+.wizard { padding: 12px 22px 30px; animation: night-rise 0.4s ease both; }
+.wizard-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 26px; }
+.wizard-back { color: var(--night-gold); font-size: 30px; line-height: 1; padding: 4px 12px; cursor: pointer; }
+.wizard-dots { display: flex; gap: 7px; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: rgba(217, 169, 78, 0.18); transition: all 0.25s; }
+.dot.done { background: rgba(217, 169, 78, 0.45); }
+.dot.active { background: var(--night-gold); box-shadow: 0 0 10px rgba(217, 169, 78, 0.6); width: 20px; border-radius: 4px; }
+.wizard-icon { text-align: center; font-size: 34px; color: var(--night-gold-bright); text-shadow: 0 0 24px rgba(236, 196, 111, 0.6); margin-bottom: 14px; animation: night-star-pulse 2.6s ease-in-out infinite; }
+.wizard-title {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 25px; font-weight: 600; color: var(--night-ivory);
+  text-align: center; margin: 0 0 10px; line-height: 1.25;
+}
+.wizard-desc { color: var(--night-muted); font-size: 14px; text-align: center; line-height: 1.5; margin: 0 0 22px; }
+.wizard-options { display: flex; flex-direction: column; gap: 10px; }
+.wizard-field { display: flex; flex-direction: column; gap: 12px; }
+
+/* ════════════ v2: История карт ════════════ */
+.hist-list { padding: 6px 16px 10px; display: flex; flex-direction: column; gap: 10px; }
+.hist-item {
+  background: var(--night-card); border: 1px solid rgba(217, 169, 78, 0.10); border-radius: 14px;
+  overflow: hidden; animation: night-rise 0.4s ease both;
+}
+.hist-row { display: flex; align-items: center; gap: 12px; padding: 14px; cursor: pointer; }
+.hist-glyph {
+  width: 42px; height: 62px; flex-shrink: 0; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; color: var(--night-gold-bright);
+  background: linear-gradient(163deg, #221c3d, #131022);
+  border: 1px solid rgba(217, 169, 78, 0.35);
+}
+.hist-glyph.card-reversed { transform: rotate(180deg); }
+.hist-main { flex: 1; min-width: 0; }
+.hist-name { color: var(--night-ivory); font-weight: 600; font-size: 15px; }
+.hist-date { color: var(--night-muted); font-size: 12px; margin-top: 2px; }
+.hist-chevron { color: var(--night-gold); opacity: 0.6; font-size: 20px; transition: transform 0.25s; }
+.hist-item.open .hist-chevron { transform: rotate(90deg); }
+.hist-detail { max-height: 0; overflow: hidden; transition: max-height 0.35s ease; }
+.hist-item.open .hist-detail { max-height: 600px; }
+.hist-detail p {
+  padding: 0 14px 14px; margin: 0; color: var(--night-muted);
+  font-size: 13.5px; line-height: 1.58; border-top: 1px solid rgba(217, 169, 78, 0.08); padding-top: 12px;
+}
+
+/* ════════════ v2: Вопрос к картам ════════════ */
+.ask-intro { text-align: center; padding: 10px 20px 4px; animation: night-rise 0.4s ease both; }
+.ask-title { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 26px; font-weight: 600; color: var(--night-ivory); margin: 0 0 8px; }
+.ask-sub { color: var(--night-muted); font-size: 14px; line-height: 1.5; margin: 0; }
+.ask-chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; padding: 16px 16px 6px; }
+.chip {
+  font-size: 12.5px; padding: 7px 14px; border-radius: 999px; cursor: pointer;
+  background: var(--night-bg2); color: var(--night-muted); border: 1px solid var(--night-line);
+  transition: all 0.18s;
+}
+.chip-active { background: var(--night-gold); color: #171106; font-weight: 600; border-color: transparent; box-shadow: 0 0 16px rgba(217, 169, 78, 0.35); }
+.ask-field { padding: 12px 16px 4px; display: flex; flex-direction: column; gap: 12px; }
+
+.reading-card {
+  margin: 14px 16px 0; padding: 18px;
+  background: var(--night-card); border: 1px solid rgba(217, 169, 78, 0.14); border-radius: 16px;
+  animation: night-rise 0.45s ease both;
+}
+.reading-q { color: var(--night-muted); font-size: 13px; font-style: italic; margin-bottom: 8px; }
+.reading-cardline {
+  color: var(--night-gold-bright); font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 19px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 10px;
+}
+.reading-text { color: var(--night-ivory); font-size: 14.5px; line-height: 1.6; margin: 0; }
+.reading-text p { margin: 0 0 8px; }
+.reading-text p:last-child { margin-bottom: 0; }
+
+/* ════════════ v2: Тарифы ════════════ */
+.plans-intro { text-align: center; padding: 10px 20px 2px; animation: night-rise 0.4s ease both; }
+.plans-title { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 26px; font-weight: 600; color: var(--night-ivory); margin: 0 0 8px; }
+.plans-sub { color: var(--night-muted); font-size: 14px; line-height: 1.5; margin: 0; }
+.plan-grid { padding: 14px 16px 4px; display: flex; flex-direction: column; gap: 12px; }
+.plan-card {
+  background: var(--night-card); border: 1px solid rgba(217, 169, 78, 0.12); border-radius: 18px;
+  padding: 18px; animation: night-rise 0.45s ease both;
+}
+.plan-featured { border-color: rgba(217, 169, 78, 0.5); box-shadow: 0 0 28px rgba(217, 169, 78, 0.12); background: linear-gradient(170deg, rgba(217, 169, 78, 0.08), var(--night-card) 45%); }
+.plan-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
+.plan-name { color: var(--night-ivory); font-weight: 700; font-size: 16px; }
+.plan-flag {
+  font-size: 10.5px; letter-spacing: 1px; text-transform: uppercase; color: #171106;
+  background: linear-gradient(160deg, #ecc46f, var(--night-gold)); border-radius: 999px; padding: 4px 10px; font-weight: 700;
+}
+.plan-price { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 34px; font-weight: 600; color: var(--night-gold-bright); }
+.plan-per { font-size: 14px; color: var(--night-muted); font-family: 'Manrope', sans-serif; margin-left: 4px; }
+.plan-feats { list-style: none; margin: 10px 0 14px; padding: 0; }
+.plan-feats li { color: var(--night-muted); font-size: 13.5px; line-height: 1.9; padding-left: 18px; position: relative; }
+.plan-feats li::before { content: '✦'; position: absolute; left: 0; color: var(--night-gold); font-size: 10px; top: 2px; }
+.plan-active { text-align: center; color: var(--night-gold-bright); font-weight: 600; padding: 10px 0 2px; }
+.annual-title { text-align: center; margin: 14px 0 0; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: #8f87a8; }
+
+/* Отзывы */
+.tst-block { padding: 22px 16px 8px; }
+.tst-title { text-align: center; font-family: 'Cormorant Garamond', Georgia, serif; font-size: 21px; color: var(--night-ivory); margin-bottom: 12px; }
+.tst-card {
+  background: var(--night-card); border: 1px solid rgba(217, 169, 78, 0.10); border-radius: 14px;
+  padding: 14px 16px; margin-bottom: 10px;
+}
+.tst-stars { color: var(--night-gold); font-size: 13px; letter-spacing: 2px; margin-bottom: 6px; }
+.tst-text { color: var(--night-ivory); font-size: 13.5px; line-height: 1.55; margin: 0 0 8px; }
+.tst-name { color: var(--night-muted); font-size: 12px; }
+
+/* ════════════ v2: Профиль ════════════ */
+.profile-hero { text-align: center; padding: 18px 0 8px; animation: night-rise 0.4s ease both; }
+.profile-avatar {
+  width: 74px; height: 74px; margin: 0 auto 12px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 30px; color: var(--night-gold-bright);
+  background: radial-gradient(circle at 32% 28%, rgba(236, 196, 111, 0.16), transparent 60%), var(--night-card);
+  border: 1px solid rgba(217, 169, 78, 0.4);
+  box-shadow: 0 0 30px rgba(217, 169, 78, 0.15);
+}
+.profile-name { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 24px; font-weight: 600; color: var(--night-ivory); }
+.profile-tier { color: var(--night-muted); font-size: 13px; margin: 4px 0 12px; letter-spacing: 0.6px; }
+.tui-btn-small { padding: 8px 18px; font-size: 13px; display: inline-block; width: auto; }
