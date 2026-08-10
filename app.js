@@ -32,6 +32,7 @@ const App = (() => {
     spheres: [],
     plans: [],
     loading: false,
+    askLimitHit: false,    // дневной лимит вопросов исчерпан → показываем пейвол
     onboardingStep: 0,
     askSphere: null,       // выбранная сфера для вопроса
     drawing: false,        // анимация вытягивания карты
@@ -269,10 +270,18 @@ const App = (() => {
     });
     state.loading = false;
     if (!res.ok) {
+      if (res.code === 'ask_limit') {
+        // Лимит дня исчерпан → превращаем отказ в путь к подписке
+        tg?.HapticFeedback?.notificationOccurred('warning');
+        state.askLimitHit = true;
+        render();
+        return;
+      }
       TaroUI.toast(res.error || 'Не получилось 🙈', { kind: 'error' });
       render();
       return;
     }
+    state.askLimitHit = false;
     state.readings.unshift(res.reading);
     state.readingsLoaded = true;
     tg?.HapticFeedback?.notificationOccurred('success');
@@ -603,17 +612,38 @@ const Screens = {
         <p class="reading-text">${_paragraphs(r.interpretation || '')}</p>
       </div>`).join('');
 
-    const body = `
-      <div class="ask-intro">
-        <h2 class="ask-title">Спроси у карт</h2>
-        <p class="ask-sub">Задай вопрос, который сейчас важен — карты ответят лично для тебя. Бесплатно: один вопрос в день.</p>
-      </div>
-      <div class="ask-chips">${chips}</div>
+    // Счётчик дневных вопросов (виден только после первой загрузки профиля)
+    const used = s.profile?.asks_today;
+    const quota = s.profile?.asks_quota;
+    const usageLine = (used != null && quota)
+      ? `<div class="ask-usage">Вопросов сегодня: <b>${used}</b> из <b>${quota}</b>${s.profile?.tier === 'free' ? ' · без лимитов — в подписке' : ''}</div>`
+      : '';
+
+    // Пейвол вместо формы, когда лимит дня исчерпан
+    const paywall = `
+      <div class="paywall">
+        <div class="paywall-icon">✦</div>
+        <h3 class="paywall-title">Бесплатный вопрос на сегодня использован</h3>
+        <p class="paywall-text">Карты уже отвечали тебе сегодня. Завтра после полуночи будет новый бесплатный вопрос — а подписка открывает ${s.profile?.tier === 'free' ? '3 вопроса каждый день' : 'больше вопросов каждый день'} и глубокие трактовки по твоей анкете.</p>
+        <button class="tui-btn tui-btn-primary tui-btn-full tui-btn-glow" onclick="App.go('plans')">Посмотреть подписки ✦</button>
+        <div class="tui-hint" style="margin-top:10px">Оплата в Telegram Stars — отменить можно в любой момент</div>
+      </div>`;
+
+    const formBlock = s.askLimitHit ? paywall : `
       <div class="ask-field">
         <textarea class="tui-input" id="ask_input" rows="3" maxlength="500"
           placeholder="Например: что мне важно понять в отношениях прямо сейчас?"></textarea>
         <button class="tui-btn tui-btn-primary tui-btn-full" onclick="App.askCard()">Спросить карты ✦</button>
+      </div>`;
+
+    const body = `
+      <div class="ask-intro">
+        <h2 class="ask-title">Спроси у карт</h2>
+        <p class="ask-sub">Задай вопрос, который сейчас важен — карты ответят лично для тебя.</p>
+        ${usageLine}
       </div>
+      <div class="ask-chips">${chips}</div>
+      ${formBlock}
       ${results}`;
     return TaroUI.screenHeader('Вопрос к картам') + body + tabs;
   },
