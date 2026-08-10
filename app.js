@@ -33,6 +33,7 @@ const App = (() => {
     plans: [],
     loading: false,
     askLimitHit: false,    // дневной лимит вопросов исчерпан → показываем пейвол
+    justDrawn: false,      // карта только что вытянута → играем 3D-переворот
     onboardingStep: 0,
     askSphere: null,       // выбранная сфера для вопроса
     drawing: false,        // анимация вытягивания карты
@@ -230,14 +231,16 @@ const App = (() => {
       return;
     }
     state.card = res.card;
+    state.justDrawn = true;
     _applyClock(res);
     tg?.HapticFeedback?.notificationOccurred('success');
     render();
-    // анимация переворота после рендера
+    // анимация переворота после рендера (класс добавляется на след. кадр)
     requestAnimationFrame(() => {
       const el = document.querySelector('.flip-card');
       if (el) el.classList.add('flipped');
     });
+    setTimeout(() => { state.justDrawn = false; }, 1400);
   }
 
   // ── Оценка карты («совпало?») ──
@@ -467,9 +470,19 @@ const Screens = {
            </div>
          </div>`;
 
+    // Следующий шаг воронки: карта дня → личный вопрос → подписка
+    const nextStep = `<div class="next-step" onclick="App.go('ask')">
+      <div class="next-step-icon">✧</div>
+      <div class="next-step-text">
+        <div class="next-step-title">Хочешь спросить о своём?</div>
+        <div class="next-step-sub">Задай картам личный вопрос — ответ придёт про тебя</div>
+      </div>
+      <div class="next-step-arrow">›</div>
+    </div>`;
+
     const body = `
       <div class="card-stage">
-        <div class="flip-card flipped">
+        <div class="flip-card ${s.justDrawn ? '' : 'flipped'}">
           <div class="flip-inner">
             <div class="flip-back"><div class="card-back-pattern">✦</div></div>
             <div class="flip-front ${c.reversed ? 'card-reversed' : ''}">
@@ -487,6 +500,7 @@ const Screens = {
         <p class="interp-text">${_paragraphs(c.interpretation || '')}</p>
       </div>
       ${reviewBlock}
+      ${nextStep}
       <div class="tui-hint" style="margin-top:14px">
         Новая карта через <span id="reset_timer" class="reset-timer">…</span> ·
         <span class="linklike" onclick="App.go('history')">История твоих карт ›</span>

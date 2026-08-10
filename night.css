@@ -463,6 +463,25 @@ body::before {
 
 .linklike { color: var(--night-gold-bright); cursor: pointer; }
 
+/* Следующий шаг воронки на главном (карта дня → личный вопрос) */
+.next-step {
+  display: flex; align-items: center; gap: 12px;
+  margin: 0 16px 12px; padding: 14px 16px; cursor: pointer;
+  background: linear-gradient(150deg, rgba(217, 169, 78, 0.09), rgba(13, 12, 20, 0));
+  border: 1px solid rgba(217, 169, 78, 0.22); border-radius: 14px;
+  animation: night-rise 0.5s ease 0.3s both;
+  transition: border-color 0.2s;
+}
+.next-step:active { border-color: rgba(217, 169, 78, 0.55); }
+.next-step-icon {
+  font-size: 22px; color: var(--night-gold-bright);
+  text-shadow: 0 0 16px rgba(236, 196, 111, 0.6); flex-shrink: 0;
+}
+.next-step-text { flex: 1; min-width: 0; }
+.next-step-title { color: var(--night-ivory); font-weight: 600; font-size: 14px; margin-bottom: 2px; }
+.next-step-sub { color: var(--night-muted); font-size: 12.5px; line-height: 1.4; }
+.next-step-arrow { color: var(--night-gold); font-size: 20px; opacity: 0.7; }
+
 /* ════════════ v2: Онбординг-визард ════════════ */
 .wizard { padding: 12px 22px 30px; animation: night-rise 0.4s ease both; }
 .wizard-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 26px; }
