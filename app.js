@@ -26,7 +26,8 @@ const App = (() => {
     card: null,            // карта дня сегодня
     cardHistory: [],       // прошлые карты
     cardHistoryLoaded: false,
-    readings: [],          // ответы на вопросы (локально, за сессию)
+    readings: [],          // ответы на вопросы (история из БД)
+    readingsLoaded: false,
     testimonials: [],
     spheres: [],
     plans: [],
@@ -34,6 +35,9 @@ const App = (() => {
     onboardingStep: 0,
     askSphere: null,       // выбранная сфера для вопроса
     drawing: false,        // анимация вытягивания карты
+    histTab: 'cards',      // история: 'cards' | 'questions'
+    resetAtMs: null,       // ближайшая полночь МСК (таймер до сброса), ms epoch
+    serverOffsetMs: 0,     // серверное время МСК − локальное
   };
 
   const root = () => document.getElementById('screen');
@@ -63,40 +67,89 @@ const App = (() => {
     const screen = Screens[state.screen] ?? Screens.home;
     el.innerHTML = screen(state);
     tg?.ready();
+    // Таймер до сброса: обновляем точечно, без перерисовки экрана
+    _startResetTimer();
   }
 
   function setLoading(v) { state.loading = v; render(); }
 
-  // ── Данные ──
-  async function loadBase() {
-    const [me, q] = await Promise.all([
-      Api.call('me', {}),
-      Api.call('questionnaire', {}),
-    ]);
-    if (me.ok) state.profile = me.profile;
-    if (q.ok) {
-      state.questions = q.questions;
-      state.answers = q.answers;
-      if (q.profile) state.profile = q.profile;
+  // ── Таймер до сброса карты дня (полночь МСК) ──
+  // Сервер отдаёт msk_now + next_reset_utc: не зависим от часов устройства.
+  let _timerIv = null;
+  function _applyClock(res) {
+    if (res && res.msk_now && res.next_reset_utc) {
+      const serverNow = new Date(res.msk_now).getTime();
+      state.serverOffsetMs = serverNow - Date.now();
+      state.resetAtMs = new Date(res.next_reset_utc).getTime();
     }
-    const [sp, pl, t] = await Promise.all([
+  }
+  function _nowCorrected() { return Date.now() + state.serverOffsetMs; }
+  function _startResetTimer() {
+    if (_timerIv) return;
+    _timerIv = setInterval(() => {
+      const el = document.getElementById('reset_timer');
+      if (!el) return;
+      if (!state.resetAtMs) { el.textContent = ''; return; }
+      const diff = state.resetAtMs - _nowCorrected();
+      if (diff <= 0) {
+        // Сброс прошёл: карта должна обновиться — тихо перезапрашиваем
+        el.textContent = '';
+        state.resetAtMs = null;
+        if (state.screen === 'home') { state.card = null; render(); }
+        return;
+      }
+      const h = Math.floor(diff / 3600000);
+      const m = Math.floor(diff % 3600000 / 60000);
+      const sec = Math.floor(diff % 60000 / 1000);
+      el.textContent = `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+    }, 1000);
+  }
+
+  // ── Данные ──
+  // Отклик: максимум параллельности. Критичный путь — только me;
+  // остальное подтягивается одновременно и не блокирует первый экран.
+  async function loadBase() {
+    const me = await Api.call('me', {});
+    if (me.ok) state.profile = me.profile;
+    const secondary = Promise.all([
+      Api.call('questionnaire', {}),
       Api.call('spheres', {}),
       Api.call('plans', {}),
       Api.call('testimonials', {}),
-    ]);
-    if (sp.ok) state.spheres = sp.spheres;
-    if (pl.ok) state.plans = pl.plans;
-    if (t.ok) state.testimonials = t.testimonials || [];
+    ]).then(([q, sp, pl, t]) => {
+      if (q.ok) {
+        state.questions = q.questions;
+        state.answers = q.answers;
+        if (q.profile) state.profile = q.profile;
+      }
+      if (sp.ok) state.spheres = sp.spheres;
+      if (pl.ok) state.plans = pl.plans;
+      if (t.ok) state.testimonials = t.testimonials || [];
+    });
+    // Анкета нужна до онбординга/карты — дожидаемся её; тарифы/отзывы — нет.
+    await secondary;
   }
 
   async function loadTodayCard() {
     const res = await Api.call('card_today', { dry_run: true });
-    if (res.ok) state.card = res.card;
+    if (res.ok) { state.card = res.card; _applyClock(res); }
   }
 
   async function loadHistory() {
     const res = await Api.call('card_history', { limit: 30 });
     if (res.ok) state.cardHistory = res.cards || [];
+  }
+
+  async function loadReadings() {
+    if (state.readingsLoaded) return;
+    const res = await Api.call('reading_history', { limit: 30 });
+    if (res.ok) { state.readings = res.readings || []; state.readingsLoaded = true; }
+  }
+
+  function setHistTab(tab) {
+    state.histTab = tab;
+    if (tab === 'questions') loadReadings().then(() => render());
+    render();
   }
 
   // ── Онбординг: обязательные вопросы по одному ──
@@ -176,6 +229,7 @@ const App = (() => {
       return;
     }
     state.card = res.card;
+    _applyClock(res);
     tg?.HapticFeedback?.notificationOccurred('success');
     render();
     // анимация переворота после рендера
@@ -220,8 +274,21 @@ const App = (() => {
       return;
     }
     state.readings.unshift(res.reading);
+    state.readingsLoaded = true;
     tg?.HapticFeedback?.notificationOccurred('success');
     state.askSphere = null;
+    render();
+  }
+
+  // ── Настройка времени карты дня ──
+  async function saveCardTime() {
+    const input = document.getElementById('card_time_input');
+    const time = (input?.value || '').trim();
+    const res = await Api.call('set_card_time', { time });
+    if (!res.ok) { TaroUI.toast(res.error || 'Не получилось сохранить', { kind: 'error' }); return; }
+    if (state.profile) state.profile.card_delivery_time = res.card_delivery_time;
+    tg?.HapticFeedback?.notificationOccurred('success');
+    TaroUI.toast(`Карта дня будет приходить в ${res.card_delivery_time} МСК 🌙`);
     render();
   }
 
@@ -277,7 +344,7 @@ const App = (() => {
     state, go, back, render, init, setLoading,
     submitAnswer, skipQuestion, drawCard, reviewCard,
     setAskSphere, askCard, payPlan, openChannel,
-    startOnboarding, loadQuestionnaire,
+    startOnboarding, loadQuestionnaire, setHistTab, saveCardTime,
   };
 })();
 
@@ -359,7 +426,9 @@ const Screens = {
         <button class="tui-btn tui-btn-primary tui-btn-full tui-btn-glow" onclick="App.drawCard()">
           Вытянуть карту дня
         </button>
-        <div class="tui-hint" style="margin-top:12px">Новая карта — каждый день после полуночи ✨</div>`;
+        <div class="tui-hint reset-hint" style="margin-top:12px">
+          Новая карта через <span id="reset_timer" class="reset-timer">…</span>
+        </div>`;
       return TaroUI.screenHeader('Карта дня') + body + tabs;
     }
 
@@ -395,7 +464,7 @@ const Screens = {
           <div class="flip-inner">
             <div class="flip-back"><div class="card-back-pattern">✦</div></div>
             <div class="flip-front ${c.reversed ? 'card-reversed' : ''}">
-              ${TaroUI.tarotCard({ name: c.card_name, reversed: c.reversed, sphere: c.sphere_label })}
+              ${TaroUI.tarotCard({ name: c.card_name, reversed: c.reversed, sphere: c.sphere_label, imageUrl: c.image_url })}
             </div>
           </div>
         </div>
@@ -410,6 +479,7 @@ const Screens = {
       </div>
       ${reviewBlock}
       <div class="tui-hint" style="margin-top:14px">
+        Новая карта через <span id="reset_timer" class="reset-timer">…</span> ·
         <span class="linklike" onclick="App.go('history')">История твоих карт ›</span>
       </div>`;
     return TaroUI.screenHeader('Карта дня') + body + tabs;
@@ -461,10 +531,36 @@ const Screens = {
       </div>`;
   },
 
-  // ═══ ИСТОРИЯ КАРТ ═══
+  // ═══ ИСТОРИЯ: карты дня + вопросы ═══
   history(s) {
     const tabs = TaroUI.tabBar(TABS, 'history');
     if (s.loading) return TaroUI.spinner() + tabs;
+
+    const seg = `
+      <div class="seg-row">
+        <div class="seg-btn ${s.histTab === 'cards' ? 'seg-active' : ''}" onclick="App.setHistTab('cards')">Карты дня</div>
+        <div class="seg-btn ${s.histTab === 'questions' ? 'seg-active' : ''}" onclick="App.setHistTab('questions')">Вопросы</div>
+      </div>`;
+
+    if (s.histTab === 'questions') {
+      const items = (s.readings || []).map(r => `
+        <div class="hist-item" onclick="this.classList.toggle('open')">
+          <div class="hist-row">
+            <div class="hist-glyph ${r.reversed ? 'card-reversed' : ''}">✧</div>
+            <div class="hist-main">
+              <div class="hist-name">${TaroUI.esc(r.card_name)}${r.reversed ? ' · перевёрнутая' : ''}</div>
+              <div class="hist-date">${_fmtDateTime(r.created_at)}${r.sphere_label ? ' · ' + TaroUI.esc(r.sphere_label) : ''}</div>
+              <div class="hist-q">«${TaroUI.esc(r.question)}»</div>
+            </div>
+            <div class="hist-chevron">›</div>
+          </div>
+          <div class="hist-detail"><p>${_paragraphs(r.interpretation || 'Ответ недоступен.')}</p></div>
+        </div>`).join('');
+      return TaroUI.screenHeader('История', { back: false }) + seg +
+        (items
+          ? `<div class="hist-list">${items}</div>`
+          : TaroUI.empty('Вопросов пока нет', 'Задай картам первый вопрос — ответ сохранится здесь')) + tabs;
+    }
 
     const items = (s.cardHistory || []).map(c => {
       const today = c.draw_date === _todayIso();
@@ -482,7 +578,7 @@ const Screens = {
         </div>`;
     }).join('');
 
-    return TaroUI.screenHeader('История карт', { back: false }) +
+    return TaroUI.screenHeader('История', { back: false }) + seg +
       (items
         ? `<div class="hist-list">${items}</div>`
         : TaroUI.empty('Пока пусто', 'Вытяни первую карту дня — она появится здесь')) + tabs;
@@ -503,6 +599,7 @@ const Screens = {
         <div class="reading-cardline">
           ${TaroUI.esc(r.card_name)} ${r.reversed ? '· перевёрнутая' : ''}
         </div>
+        ${r.image_url ? `<img class="reading-img" src="${TaroUI.esc(r.image_url)}" alt="${TaroUI.esc(r.card_name)}" loading="lazy">` : ''}
         <p class="reading-text">${_paragraphs(r.interpretation || '')}</p>
       </div>`).join('');
 
@@ -601,6 +698,22 @@ const Screens = {
       TaroUI.row('Главная сфера', p.main_sphere_label || '—', { arrow: true, onClick: `Screens._openQuestion('priority_sphere')` }),
     ].join('');
 
+    const curTime = p.card_delivery_time || '08:00';
+    const timeBlock = `
+      <div class="tui-section-wrap">
+        <div class="tui-section-header">Карта дня</div>
+        <div class="tui-section">
+          <div class="tui-row">
+            <div class="tui-row-label">Время карты дня (МСК)</div>
+          </div>
+          <div class="time-picker-row">
+            <input class="tui-input time-input" id="card_time_input" type="time" value="${TaroUI.esc(curTime)}">
+            <button class="tui-btn tui-btn-primary time-save" onclick="App.saveCardTime()">Сохранить</button>
+          </div>
+        </div>
+        <div class="tui-section-footer">Карты сами будут присылать расклад в выбранное время.</div>
+      </div>`;
+
     const body = `
       <div class="profile-hero">
         <div class="profile-avatar">✦</div>
@@ -609,6 +722,7 @@ const Screens = {
         ${p.tier === 'free' ? `<button class="tui-btn tui-btn-secondary tui-btn-small" onclick="App.go('plans')">Улучшить подписку</button>` : ''}
       </div>
       ${TaroUI.section(rows, { header: 'Твои данные' })}
+      ${timeBlock}
       ${TaroUI.section(
         TaroUI.row('Полная анкета', 'изменить ответы', { arrow: true, onClick: `App.go('questionnaire')` }) +
         TaroUI.row('Канал Полины', 'открыть', { arrow: true, onClick: 'App.openChannel()' }),
@@ -703,6 +817,18 @@ function _fmtDate(iso) {
   if (!iso) return '';
   const [y, m, d] = String(iso).slice(0, 10).split('-');
   return `${d}.${m}.${y}`;
+}
+function _fmtDateTime(iso) {
+  if (!iso) return '';
+  const s = String(iso);
+  const datePart = _fmtDate(s);
+  // created_at в UTC — переводим в МСК для отображения
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return datePart;
+  const msk = new Date(d.getTime() + 180 * 60000);
+  const hh = String(msk.getUTCHours()).padStart(2, '0');
+  const mm = String(msk.getUTCMinutes()).padStart(2, '0');
+  return `${datePart} ${hh}:${mm}`;
 }
 function _paragraphs(text) {
   return String(text || '').split(/\n+/).map(p => p.trim()).filter(Boolean)

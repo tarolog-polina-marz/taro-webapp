@@ -71,8 +71,11 @@ const TaroUI = (() => {
   const badge = (text, { active = false } = {}) =>
     `<span class="tui-badge ${active ? 'tui-badge-active' : ''}">${esc(text)}</span>`;
 
-  /** Спиннер. */
-  const spinner = () => `<div class="tui-spinner"><div></div></div>`;
+  /** Спиннер (брендовый лоадер: луна и звёзды). */
+  const spinner = () => `<div class="taro-loader" aria-label="Загрузка">
+      <div class="taro-loader-moon">☾</div>
+      <div class="taro-loader-orbit"><span class="taro-loader-star s1">✦</span><span class="taro-loader-star s2">✧</span><span class="taro-loader-star s3">✦</span></div>
+    </div>`;
 
   /** Пустое состояние. */
   const empty = (title, subtitle = '') => `
@@ -85,11 +88,13 @@ const TaroUI = (() => {
   const card = (inner, { onClick = '' } = {}) => `
     <div class="tui-card ${onClick ? 'tui-row-clickable' : ''}" ${onClick ? `onclick="${onClick}"` : ''}>${inner}</div>`;
 
-  /** Большая карта таро (визуальный центр экрана карты дня). */
-  const tarotCard = ({ name, reversed = false, sphere = '' }) => `
+  /** Большая карта таро (визуальный центр экрана карты дня).
+   *  imageUrl — реальная карта RWS; без неё — фирменный плейсхолдер. */
+  const tarotCard = ({ name, reversed = false, sphere = '', imageUrl = '' }) => `
     <div class="tui-tarot ${reversed ? 'tui-tarot-reversed' : ''}">
-      <div class="tui-tarot-inner">
-        <div class="tui-tarot-star">✦</div>
+      ${imageUrl ? `<img class="tui-tarot-img" src="${esc(imageUrl)}" alt="${esc(name)}" loading="lazy">` : ''}
+      <div class="tui-tarot-inner ${imageUrl ? 'tui-tarot-inner-overlay' : ''}">
+        ${imageUrl ? '' : '<div class="tui-tarot-star">✦</div>'}
         <div class="tui-tarot-name">${esc(name)}</div>
         ${reversed ? '<div class="tui-tarot-pos">перевёрнутая</div>' : ''}
         ${sphere ? `<div class="tui-tarot-sphere">${esc(sphere)}</div>` : ''}

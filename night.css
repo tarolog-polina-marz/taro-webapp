@@ -246,6 +246,86 @@ body::before {
   border-top-color: var(--night-gold);
 }
 
+/* ── Брендовый лоадер: луна в кольце звёзд ── */
+.taro-loader {
+  position: relative; width: 74px; height: 74px;
+  margin: 56px auto 18px; display: flex; align-items: center; justify-content: center;
+}
+.taro-loader-moon {
+  font-size: 30px; color: var(--night-gold-bright);
+  text-shadow: 0 0 22px rgba(236, 196, 111, 0.75);
+  animation: loader-moon 2.6s ease-in-out infinite;
+}
+.taro-loader-orbit {
+  position: absolute; inset: 0;
+  animation: loader-orbit 2.2s linear infinite;
+}
+.taro-loader-star {
+  position: absolute; font-size: 12px; color: var(--night-gold);
+  text-shadow: 0 0 10px rgba(217, 169, 78, 0.8);
+}
+.taro-loader-star.s1 { top: 0; left: 50%; transform: translateX(-50%); }
+.taro-loader-star.s2 { bottom: 8px; left: 6px; font-size: 10px; }
+.taro-loader-star.s3 { bottom: 8px; right: 6px; font-size: 10px; }
+@keyframes loader-moon {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.65; transform: scale(0.92); }
+}
+@keyframes loader-orbit { to { transform: rotate(360deg); } }
+
+/* ── Таймер до сброса карты дня ── */
+.reset-timer {
+  color: var(--night-gold-bright); font-weight: 600;
+  font-variant-numeric: tabular-nums; letter-spacing: 0.5px;
+}
+.reset-hint { text-align: center; }
+
+/* ── Сегменты истории (карты/вопросы) ── */
+.seg-row {
+  display: flex; gap: 4px; margin: 10px 16px 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--night-line);
+  border-radius: 12px; padding: 4px;
+}
+.seg-btn {
+  flex: 1; text-align: center; padding: 8px 0; border-radius: 9px;
+  font-size: 13px; color: var(--night-muted); cursor: pointer;
+  transition: all 0.22s ease;
+}
+.seg-active {
+  background: var(--night-gold-dim); color: var(--night-gold-bright);
+  font-weight: 600;
+}
+
+/* ── Картинка реальной карты (RWS) ── */
+.tui-tarot-img {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; border-radius: 15px;
+  animation: night-card-in 0.6s ease both;
+}
+.tui-tarot { position: relative; overflow: hidden; }
+.tui-tarot-inner-overlay {
+  position: absolute; inset: auto 0 0 0;
+  background: linear-gradient(to top, rgba(10, 8, 18, 0.88) 0%, rgba(10, 8, 18, 0.35) 55%, transparent 100%);
+  padding: 14px 12px 12px; border-radius: 0 0 15px 15px;
+}
+.tui-tarot-inner-overlay .tui-tarot-name { font-size: 17px; text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9); }
+.tui-tarot-inner-overlay .tui-tarot-pos,
+.tui-tarot-inner-overlay .tui-tarot-sphere { text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9); }
+.reading-img {
+  display: block; width: 120px; margin: 10px auto 4px;
+  border-radius: 10px; border: 1px solid var(--night-line);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+/* ── Настройка времени карты дня ── */
+.time-picker-row { display: flex; gap: 10px; align-items: center; padding: 4px 14px 12px; }
+.time-input { flex: 0 0 130px; text-align: center; font-size: 16px; }
+.time-save { flex: 1; }
+
+/* ── Вопрос в истории ── */
+.hist-q { font-size: 12px; color: var(--night-muted); font-style: italic; margin-top: 2px; }
+
 /* ── Хинт ── */
 .tui-hint { line-height: 1.45; }
 
