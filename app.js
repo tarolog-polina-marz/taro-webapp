@@ -46,12 +46,22 @@ const App = (() => {
     serverOffsetMs: 0,     // серверное время МСК − локальное
     // ── Admin state ──
     adminToken: sessionStorage.getItem('admin_token') || null,
-    adminTab: 'posts',     // posts | slots | products | broadcasts | profile
+    adminTab: 'dashboard',  // dashboard | users | posts | slots | products | broadcasts | settings
+    adminSidebarOpen: false,
     adminPosts: [],
     adminSlots: [],
     adminProducts: [],
     adminBroadcasts: [],
     adminEditing: null,    // currently editing item
+    adminDashboard: null,  // metrics + events + chart
+    adminUsers: [],
+    adminUsersPage: 1,
+    adminUsersTotal: 0,
+    adminUsersPages: 1,
+    adminUsersSearch: '',
+    adminUsersTier: '',
+    adminUserDetail: null, // selected user detail
+    adminToasts: [],       // toast notifications
   };
 
   const root = () => document.getElementById('screen');
@@ -467,6 +477,7 @@ const App = (() => {
     if (window.location.hash === '#admin' || window.location.hash === '#admin/') {
       if (state.adminToken) {
         go('admin_dashboard', { push: false });
+        adminLoadTab('dashboard');
       } else {
         go('admin_login', { push: false });
       }
@@ -479,7 +490,12 @@ const App = (() => {
       if (state.profile?.mandatory_done) {
         await loadTodayCard();
         setLoading(false);
-        go('home', { push: false });
+        // Deep link: #booking → сразу на экран записи к Полине
+        if (window.location.hash === '#booking') {
+          go('booking', { push: false });
+        } else {
+          go('home', { push: false });
+        }
       } else if (state.profile) {
         setLoading(false);
         go('welcome', { push: false });
@@ -534,7 +550,7 @@ const App = (() => {
     sessionStorage.setItem('admin_token', res.token);
     tg?.HapticFeedback?.notificationOccurred('success');
     go('admin_dashboard', { push: false });
-    await adminLoadTab('posts');
+    await adminLoadTab('dashboard');
   }
 
   function adminLogout() {
@@ -544,13 +560,104 @@ const App = (() => {
     state.adminSlots = [];
     state.adminProducts = [];
     state.adminBroadcasts = [];
+    state.adminDashboard = null;
+    state.adminUsers = [];
+    state.adminUserDetail = null;
     go('admin_login', { push: false });
+  }
+
+  // ── Toast system ──
+  function adminToast(msg, kind = 'success') {
+    const toast = { id: Date.now() + Math.random(), msg, kind, ts: Date.now() };
+    state.adminToasts.push(toast);
+    render();
+    setTimeout(() => {
+      state.adminToasts = state.adminToasts.filter(t => t.id !== toast.id);
+      render();
+    }, 4000);
+  }
+
+  function adminToggleSidebar() {
+    state.adminSidebarOpen = !state.adminSidebarOpen;
+    render();
+  }
+
+  async function adminLoadDashboard() {
+    const res = await adminCall('admin_dashboard', {});
+    if (res.ok) {
+      state.adminDashboard = res;
+      adminToast('Дашборд обновлён', 'info');
+    } else {
+      adminToast(res.error || 'Ошибка загрузки', 'error');
+    }
+    render();
+  }
+
+  async function adminLoadUsers(page) {
+    if (page) state.adminUsersPage = page;
+    const res = await adminCall('admin_users', {
+      sub: 'list',
+      page: state.adminUsersPage,
+      per_page: 20,
+      search: state.adminUsersSearch,
+      tier: state.adminUsersTier,
+    });
+    if (res.ok) {
+      state.adminUsers = res.users;
+      state.adminUsersTotal = res.total;
+      state.adminUsersPages = res.pages;
+    } else {
+      adminToast(res.error || 'Ошибка загрузки', 'error');
+    }
+    render();
+  }
+
+  async function adminSearchUsers() {
+    const input = document.getElementById('user_search_input');
+    state.adminUsersSearch = (input?.value || '').trim();
+    state.adminUsersPage = 1;
+    await adminLoadUsers();
+  }
+
+  function adminFilterTier(tier) {
+    state.adminUsersTier = tier;
+    state.adminUsersPage = 1;
+    adminLoadUsers();
+  }
+
+  async function adminLoadUserDetail(profileId) {
+    state.adminUserDetail = { _loading: true };
+    render();
+    const res = await adminCall('admin_users', { sub: 'detail', profile_id: profileId });
+    if (res.ok) {
+      state.adminUserDetail = res;
+    } else {
+      state.adminUserDetail = null;
+      adminToast(res.error || 'Ошибка', 'error');
+    }
+    render();
+  }
+
+  function adminCloseUserDetail() {
+    state.adminUserDetail = null;
+    render();
+  }
+
+  function adminUsersPage(delta) {
+    const next = state.adminUsersPage + delta;
+    if (next < 1 || next > state.adminUsersPages) return;
+    adminLoadUsers(next);
   }
 
   async function adminLoadTab(tab) {
     state.adminTab = tab;
+    state.adminSidebarOpen = false;
     render();
-    if (tab === 'posts' && !state.adminPosts.length) {
+    if (tab === 'dashboard') {
+      if (!state.adminDashboard) await adminLoadDashboard();
+    } else if (tab === 'users') {
+      if (!state.adminUsers.length) await adminLoadUsers();
+    } else if (tab === 'posts' && !state.adminPosts.length) {
       const res = await adminCall('admin_posts', { sub: 'list' });
       if (res.ok) state.adminPosts = res.posts || [];
     } else if (tab === 'slots' && !state.adminSlots.length) {
@@ -680,7 +787,6 @@ const App = (() => {
   }
 
   function adminSetTab(tab) {
-    state.adminTab = tab;
     adminLoadTab(tab);
   }
 
@@ -696,6 +802,10 @@ const App = (() => {
     adminDeleteSlot, adminSaveSlot, adminSaveProduct, adminToggleProduct,
     adminSaveBroadcast, adminSendBroadcast, adminEdit, adminSetTab,
     adminChangeCredentials,
+    // Admin v2
+    adminToast, adminToggleSidebar, adminLoadDashboard, adminLoadUsers,
+    adminSearchUsers, adminFilterTier, adminLoadUserDetail, adminCloseUserDetail,
+    adminUsersPage,
   };
 })();
 
@@ -1405,37 +1515,290 @@ const Screens = {
   // ═══ ADMIN: ДАШБОРД ═══
   admin_dashboard(s) {
     if (!s.adminToken) { App.go('admin_login', { push: false }); return ''; }
-    if (s.loading) return TaroUI.spinner();
 
-    const tabs = [
+    const navItems = [
+      { id: 'dashboard', icon: '▣', label: 'Дашборд' },
+      { id: 'users', icon: '○', label: 'Пользователи' },
       { id: 'posts', icon: '✦', label: 'Блог' },
       { id: 'slots', icon: '☽', label: 'Слоты' },
       { id: 'products', icon: '❖', label: 'Товары' },
       { id: 'broadcasts', icon: '✧', label: 'Рассылки' },
-      { id: 'profile', icon: '☉', label: 'Профиль' },
+      { id: 'settings', icon: '☉', label: 'Настройки' },
     ];
 
-    const tabBarHtml = `<div class="admin-tabbar">
-      ${tabs.map(t => `<div class="admin-tab ${s.adminTab === t.id ? 'admin-tab-active' : ''}" onclick="App.adminSetTab('${t.id}')">
-        <span class="admin-tab-icon">${t.icon}</span>
-        <span class="admin-tab-label">${TaroUI.esc(t.label)}</span>
-      </div>`).join('')}
+    const sidebarHtml = `<div class="adm-sidebar ${s.adminSidebarOpen ? 'adm-sidebar-open' : ''}" id="adm_sidebar">
+      <div class="adm-sidebar-header">
+        <div class="adm-sidebar-logo">✦</div>
+        <div class="adm-sidebar-title">ТАРО Админ</div>
+      </div>
+      <nav class="adm-sidebar-nav">
+        ${navItems.map(n => `<div class="adm-nav-item ${s.adminTab === n.id ? 'adm-nav-active' : ''}" onclick="App.adminLoadTab('${n.id}')">
+          <span class="adm-nav-icon">${n.icon}</span>
+          <span class="adm-nav-label">${n.label}</span>
+        </div>`).join('')}
+      </nav>
+      <div class="adm-sidebar-footer">
+        <div class="adm-sidebar-user">
+          <div class="adm-sidebar-avatar">✦</div>
+          <div class="adm-sidebar-userinfo">
+            <div class="adm-sidebar-name">Полина</div>
+            <div class="adm-sidebar-role">Владелец</div>
+          </div>
+        </div>
+        <div class="adm-sidebar-logout" onclick="App.adminLogout()">Выйти</div>
+      </div>
+    </div>
+    <div class="adm-sidebar-overlay ${s.adminSidebarOpen ? 'adm-overlay-show' : ''}" onclick="App.adminToggleSidebar()"></div>`;
+
+    const topbarHtml = `<div class="adm-topbar">
+      <div class="adm-topbar-left">
+        <button class="adm-hamburger" onclick="App.adminToggleSidebar()">☰</button>
+        <span class="adm-topbar-title">${TaroUI.esc(navItems.find(n => n.id === s.adminTab)?.label || 'Дашборд')}</span>
+      </div>
+      <div class="adm-topbar-right">
+        <div class="adm-topbar-avatar">✦</div>
+        <span class="adm-topbar-name">Полина</span>
+        <button class="adm-topbar-logout" onclick="App.adminLogout()">Выйти</button>
+      </div>
     </div>`;
 
     let content = '';
-    if (s.adminTab === 'posts') content = Screens._adminPosts(s);
+    if (s.adminTab === 'dashboard') content = Screens._adminDashboardHome(s);
+    else if (s.adminTab === 'users') content = Screens._adminUsers(s);
+    else if (s.adminTab === 'posts') content = Screens._adminPosts(s);
     else if (s.adminTab === 'slots') content = Screens._adminSlots(s);
     else if (s.adminTab === 'products') content = Screens._adminProducts(s);
     else if (s.adminTab === 'broadcasts') content = Screens._adminBroadcasts(s);
-    else if (s.adminTab === 'profile') content = Screens._adminProfile(s);
+    else if (s.adminTab === 'settings') content = Screens._adminSettings(s);
 
-    const header = `
-      <div class="admin-header">
-        <div class="admin-header-title">Админ-панель</div>
-        <div class="admin-logout" onclick="App.adminLogout()">Выйти</div>
+    // Toast container
+    const toastsHtml = `<div class="adm-toasts">
+      ${s.adminToasts.map(t => `<div class="adm-toast adm-toast-${t.kind}">
+        <span class="adm-toast-icon">${t.kind === 'success' ? '✓' : t.kind === 'error' ? '✕' : 'ⓘ'}</span>
+        <span class="adm-toast-msg">${TaroUI.esc(t.msg)}</span>
+      </div>`).join('')}
+    </div>`;
+
+    return `<div class="adm-layout">${sidebarHtml}
+      <div class="adm-main">
+        ${topbarHtml}
+        <div class="adm-content">${content}</div>
+      </div>
+    </div>${toastsHtml}`;
+  },
+
+  // ═══ ADMIN: ДАШБОРД — главная ═══
+  _adminDashboardHome(s) {
+    const d = s.adminDashboard;
+    if (!d) return TaroUI.spinner();
+    const m = d.metrics;
+
+    const tierLabel = { free: 'Free', basic: '$5', standard: '$10', premium: '$20' };
+    const tierBadges = Object.entries(m.tier_breakdown || {})
+      .map(([tier, count]) => `<span class="adm-tier-chip">${tierLabel[tier] || tier}: <b>${count}</b></span>`)
+      .join('');
+
+    // Bar chart: registrations by day
+    const chartData = d.registrations_by_day || [];
+    const maxVal = Math.max(1, ...chartData.map(d => d.count));
+    const chartBars = chartData.map((d, i) => {
+      const h = Math.max(2, (d.count / maxVal) * 120);
+      const dayLabel = d.date.slice(8) + '.' + d.date.slice(5, 7);
+      return `<div class="adm-chart-bar-wrap" title="${dayLabel}: ${d.count}">
+        <div class="adm-chart-bar-val">${d.count}</div>
+        <div class="adm-chart-bar" style="height:${h}px"></div>
+        <div class="adm-chart-bar-label">${dayLabel}</div>
       </div>`;
+    }).join('');
 
-    return header + tabBarHtml + `<div class="admin-content">${content}</div>`;
+    // Event icons
+    const eventIcon = { user: '○', card: '✦', booking: '☽' };
+    const events = (d.events || []).slice(0, 10).map(e => `
+      <div class="adm-event">
+        <span class="adm-event-icon">${eventIcon[e.type] || '•'}</span>
+        <span class="adm-event-text">${TaroUI.esc(e.text)}</span>
+        <span class="adm-event-time">${_fmtDate(String(e.at).slice(0, 10))}</span>
+      </div>`).join('');
+
+    return `
+      <div class="adm-metrics-grid">
+        <div class="adm-metric-card">
+          <div class="adm-metric-icon">○</div>
+          <div class="adm-metric-val">${m.total_users}</div>
+          <div class="adm-metric-label">Всего пользователей</div>
+        </div>
+        <div class="adm-metric-card">
+          <div class="adm-metric-icon">✦</div>
+          <div class="adm-metric-val">${m.active_subscriptions}</div>
+          <div class="adm-metric-label">Активных подписок</div>
+          <div class="adm-metric-sub">${tierBadges}</div>
+        </div>
+        <div class="adm-metric-card">
+          <div class="adm-metric-icon">☽</div>
+          <div class="adm-metric-val">${m.cards_today}</div>
+          <div class="adm-metric-label">Карт дня сегодня</div>
+        </div>
+        <div class="adm-metric-card">
+          <div class="adm-metric-icon">☾</div>
+          <div class="adm-metric-val">${m.slots_free}<span class="adm-metric-sep">/</span>${m.slots_booked}</div>
+          <div class="adm-metric-label">Слоты свободно/занято</div>
+        </div>
+        <div class="adm-metric-card">
+          <div class="adm-metric-icon">✧</div>
+          <div class="adm-metric-val">${m.broadcasts_sent}</div>
+          <div class="adm-metric-label">Рассылок отправлено</div>
+        </div>
+        <div class="adm-metric-card">
+          <div class="adm-metric-icon">❖</div>
+          <div class="adm-metric-val">${m.blog_posts}</div>
+          <div class="adm-metric-label">Статей в блоге</div>
+          <div class="adm-metric-sub">${m.blog_published} опубликовано</div>
+        </div>
+      </div>
+      <div class="adm-dashboard-row">
+        <div class="adm-chart-section">
+          <div class="adm-section-title">Регистрации по дням</div>
+          <div class="adm-chart">${chartBars}</div>
+        </div>
+        <div class="adm-events-section">
+          <div class="adm-section-title">Последние события</div>
+          <div class="adm-events-list">${events || '<div class="adm-empty">Пока нет событий</div>'}</div>
+        </div>
+      </div>
+      <button class="tui-btn tui-btn-secondary tui-btn-small adm-refresh-btn" onclick="App.adminLoadDashboard()">↻ Обновить</button>`;
+  },
+
+  // ═══ ADMIN: ПОЛЬЗОВАТЕЛИ ═══
+  _adminUsers(s) {
+    if (s.adminUserDetail) return Screens._adminUserDetailModal(s);
+
+    const tierLabel = { free: 'Free', basic: 'Basic', standard: 'Standard', premium: 'Premium' };
+    const tierColors = { free: 'adm-badge-dim', basic: 'adm-badge-gold', standard: 'adm-badge-gold', premium: 'admin-badge-green' };
+
+    const rows = (s.adminUsers || []).map(u => `
+      <tr class="adm-table-row" onclick="App.adminLoadUserDetail('${u.id}')">
+        <td class="adm-cell-name">${TaroUI.esc(u.first_name || '—')}</td>
+        <td>${TaroUI.esc(u.username || '—')}</td>
+        <td><span class="adm-badge ${tierColors[u.tier] || 'adm-badge-dim'}">${tierLabel[u.tier] || u.tier || 'free'}</span></td>
+        <td>${TaroUI.esc(u.locale || '—')}</td>
+        <td>${u.created_at ? _fmtDate(u.created_at.slice(0, 10)) : '—'}</td>
+        <td>${u.card_count || 0}</td>
+      </tr>`).join('');
+
+    const tierFilterBtns = ['', 'free', 'basic', 'standard', 'premium'].map(t =>
+      `<button class="adm-filter-btn ${s.adminUsersTier === t ? 'adm-filter-active' : ''}" onclick="App.adminFilterTier('${t}')">${t ? tierLabel[t] : 'Все'}</button>`
+    ).join('');
+
+    return `
+      <div class="adm-section-header">
+        <span>Пользователи · ${s.adminUsersTotal}</span>
+        <div class="adm-search-row">
+          <input class="tui-input adm-search-input" id="user_search_input" type="text"
+            placeholder="Поиск по имени/username..."
+            value="${TaroUI.esc(s.adminUsersSearch)}"
+            onkeydown="if(event.key==='Enter')App.adminSearchUsers()">
+          <button class="tui-btn tui-btn-secondary tui-btn-small" onclick="App.adminSearchUsers()">Найти</button>
+        </div>
+      </div>
+      <div class="adm-filter-row">${tierFilterBtns}</div>
+      ${rows ? `<div class="adm-table-wrap">
+        <table class="adm-table">
+          <thead><tr>
+            <th>Имя</th><th>Username</th><th>Tier</th><th>Локаль</th><th>Регистрация</th><th>Карт</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>` : TaroUI.spinner()}
+      ${s.adminUsersPages > 1 ? `<div class="adm-pagination">
+        <button class="tui-btn tui-btn-secondary tui-btn-small" onclick="App.adminUsersPage(-1)" ${s.adminUsersPage <= 1 ? 'disabled' : ''}>‹ Назад</button>
+        <span class="adm-pagination-info">Стр. ${s.adminUsersPage} из ${s.adminUsersPages}</span>
+        <button class="tui-btn tui-btn-secondary tui-btn-small" onclick="App.adminUsersPage(1)" ${s.adminUsersPage >= s.adminUsersPages ? 'disabled' : ''}>Дальше ›</button>
+      </div>` : ''}`;
+  },
+
+  // ═══ ADMIN: ДЕТАЛИ ПОЛЬЗОВАТЕЛЯ (модалка) ═══
+  _adminUserDetailModal(s) {
+    const d = s.adminUserDetail;
+    if (d._loading) return TaroUI.spinner();
+    const p = d.profile || {};
+
+    const tierLabel = { free: 'Free', basic: 'Basic', standard: 'Standard', premium: 'Premium' };
+    const sphereLabels = { love: 'Любовь', finance: 'Финансы', health: 'Здоровье', family: 'Семья', purpose: 'Предназначение' };
+
+    const cardsHtml = (d.cards || []).map(c => `
+      <div class="adm-detail-row">
+        <span class="adm-detail-icon">${c.reversed ? '⥁' : '✦'}</span>
+        <span class="adm-detail-main">${TaroUI.esc(c.card_name || '—')}</span>
+        <span class="adm-detail-date">${_fmtDate(c.draw_date)}</span>
+      </div>`).join('');
+
+    const paymentsHtml = (d.payments || []).map(p => `
+      <div class="adm-detail-row">
+        <span class="adm-detail-icon">$</span>
+        <span class="adm-detail-main">${(p.amount_cents / 100).toFixed(2)}$ · ${p.item_type || '—'}</span>
+        <span class="adm-detail-status">${p.status}</span>
+      </div>`).join('');
+
+    const bookingsHtml = (d.bookings || []).map(b => `
+      <div class="adm-detail-row">
+        <span class="adm-detail-icon">☽</span>
+        <span class="adm-detail-main">${_fmtDate(b.date)} ${String(b.time).slice(0,5)}</span>
+        <span class="adm-detail-status">${b.status}</span>
+      </div>`).join('');
+
+    const questHtml = (d.questionnaire || []).map(q => `
+      <div class="adm-detail-quest">
+        <div class="adm-detail-quest-q">${TaroUI.esc(q.question || q.key || '—')}</div>
+        <div class="adm-detail-quest-a">${TaroUI.esc(q.answer || '—')}</div>
+      </div>`).join('');
+
+    return `
+      <div class="adm-modal-backdrop" onclick="App.adminCloseUserDetail()">
+        <div class="adm-modal" onclick="event.stopPropagation()">
+          <div class="adm-modal-header">
+            <span class="adm-modal-title">${TaroUI.esc(p.first_name || 'Пользователь')}</span>
+            <button class="adm-modal-close" onclick="App.adminCloseUserDetail()">✕</button>
+          </div>
+          <div class="adm-modal-body">
+            <div class="adm-detail-profile">
+              <div class="adm-detail-avatar">✦</div>
+              <div class="adm-detail-info">
+                <div class="adm-detail-name">${TaroUI.esc(p.first_name || '—')}</div>
+                <div class="adm-detail-meta">
+                  @${TaroUI.esc(p.username || '—')} · 
+                  <span class="adm-badge ${tierColors[p.tier] || 'adm-badge-dim'}">${tierLabel[p.tier] || 'free'}</span>
+                  ${p.is_annual ? ' · годовая' : ''}
+                </div>
+                <div class="adm-detail-meta2">
+                  ${p.locale ? 'Язык: ' + TaroUI.esc(p.locale) : ''}
+                  ${p.birth_date ? ' · Родился: ' + _fmtDate(p.birth_date) : ''}
+                  ${p.priority_sphere ? ' · Сфера: ' + TaroUI.esc(sphereLabels[p.priority_sphere] || p.priority_sphere) : ''}
+                </div>
+                <div class="adm-detail-meta2">
+                  Регистрация: ${p.created_at ? _fmtDate(p.created_at.slice(0,10)) : '—'}
+                  ${p.card_delivery_time ? ' · Карта дня в ' + p.card_delivery_time + ' МСК' : ''}
+                </div>
+              </div>
+            </div>
+            <div class="adm-detail-section">
+              <div class="adm-detail-section-title">Карты дня (${(d.cards || []).length})</div>
+              ${cardsHtml || '<div class="adm-empty">Нет карт</div>'}
+            </div>
+            <div class="adm-detail-section">
+              <div class="adm-detail-section-title">Платежи (${(d.payments || []).length})</div>
+              ${paymentsHtml || '<div class="adm-empty">Нет платежей</div>'}
+            </div>
+            <div class="adm-detail-section">
+              <div class="adm-detail-section-title">Записи (${(d.bookings || []).length})</div>
+              ${bookingsHtml || '<div class="adm-empty">Нет записей</div>'}
+            </div>
+            <div class="adm-detail-section">
+              <div class="adm-detail-section-title">Анкета</div>
+              ${questHtml || '<div class="adm-empty">Нет ответов</div>'}
+            </div>
+          </div>
+        </div>
+      </div>`;
   },
 
   // ═══ ADMIN: БЛОГ (посты) ═══
@@ -1816,8 +2179,8 @@ const Screens = {
       </div>`;
   },
 
-  // ═══ ADMIN: ПРОФИЛЬ ═══
-  _adminProfile(s) {
+  // ═══ ADMIN: НАСТРОЙКИ ═══
+  _adminSettings(s) {
     return `
       <div class="admin-profile-wrap">
         <div class="admin-profile-icon">✦</div>
