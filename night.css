@@ -624,3 +624,79 @@ body::before {
   color: var(--night-ivory); margin: 0 0 10px; font-weight: 600;
 }
 .paywall-text { color: var(--night-muted); font-size: 13.5px; line-height: 1.6; margin: 0 0 18px; }
+
+/* ════════════ МАГАЗИН ════════════ */
+.shop-intro { text-align: center; padding: 12px 0 20px; }
+.shop-title { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 28px; color: var(--night-ivory); margin: 0 0 6px; font-weight: 600; }
+.shop-sub { color: var(--night-muted); font-size: 13.5px; line-height: 1.5; margin: 0 auto; max-width: 300px; }
+
+.polina-cta {
+  display: flex; align-items: center; gap: 14px; padding: 16px; margin: 16px 0;
+  background: linear-gradient(135deg, rgba(236,196,111,0.1), rgba(13,12,20,0.4));
+  border: 1px solid rgba(217,169,78,0.35); border-radius: 16px; cursor: pointer;
+  transition: border-color 0.3s, transform 0.3s;
+}
+.polina-cta:active { transform: scale(0.98); }
+.polina-cta-icon { font-size: 28px; color: var(--night-gold-bright); flex-shrink: 0; text-shadow: 0 0 20px rgba(217,169,78,0.5); }
+.polina-cta-text { flex: 1; }
+.polina-cta-title { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 17px; color: var(--night-ivory); font-weight: 600; }
+.polina-cta-sub { font-size: 12.5px; color: var(--night-muted); margin-top: 2px; }
+.polina-cta-arrow { color: var(--night-gold); font-size: 20px; }
+
+.shop-group { margin-bottom: 24px; }
+.shop-group-title {
+  font-family: 'Cormorant Garamond', Georgia, serif; font-size: 18px;
+  color: var(--night-gold); margin: 0 0 12px; font-weight: 500; letter-spacing: 0.5px;
+}
+.shop-item {
+  padding: 16px; margin-bottom: 12px;
+  background: var(--night-card); border: 1px solid rgba(217,169,78,0.18);
+  border-radius: 14px; transition: border-color 0.3s;
+}
+.shop-item:active { border-color: rgba(217,169,78,0.5); }
+.shop-item-type { font-size: 11px; color: var(--night-muted); letter-spacing: 0.3px; text-transform: uppercase; }
+.shop-item-name { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 18px; color: var(--night-ivory); margin: 4px 0; font-weight: 600; }
+.shop-item-price { font-size: 20px; color: var(--night-gold-bright); font-weight: 700; margin-bottom: 6px; }
+.shop-item-desc { font-size: 13px; color: var(--night-muted); line-height: 1.55; margin-bottom: 12px; }
+
+.shop-individual {
+  margin-top: 20px; padding: 20px 16px; text-align: center;
+  background: rgba(13,12,20,0.4); border: 1px solid rgba(217,169,78,0.12); border-radius: 14px;
+}
+.shop-individual-title { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 17px; color: var(--night-ivory); margin-bottom: 6px; }
+.shop-individual-text { font-size: 13px; color: var(--night-muted); margin-bottom: 14px; line-height: 1.5; }
+
+/* CTA Полины на главном экране */
+.polina-step .next-step-icon { color: var(--night-gold-bright); }
+.polina-step { border-color: rgba(217,169,78,0.28); }
+
+/* ════════════ ЗАПИСЬ К ПОЛИНЕ ════════════ */
+.booking-intro { text-align: center; padding: 12px 0 20px; }
+.booking-title { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 26px; color: var(--night-ivory); margin: 0 0 6px; font-weight: 600; }
+.booking-sub { color: var(--night-muted); font-size: 13px; line-height: 1.55; margin: 0 auto; max-width: 320px; }
+
+.booking-services { margin-bottom: 20px; }
+.service-row {
+  padding: 12px 16px; margin-bottom: 8px;
+  background: var(--night-card); border: 1px solid rgba(217,169,78,0.15); border-radius: 12px;
+}
+.service-name { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 16px; color: var(--night-ivory); font-weight: 600; }
+.service-meta { font-size: 12px; color: var(--night-muted); margin-top: 2px; }
+
+.booking-slots-title {
+  font-family: 'Cormorant Garamond', Georgia, serif; font-size: 17px;
+  color: var(--night-gold); margin: 0 0 14px; font-weight: 500;
+}
+.booking-date { margin-bottom: 16px; }
+.booking-date-label {
+  font-size: 13px; color: var(--night-muted); margin-bottom: 8px;
+  text-transform: capitalize; letter-spacing: 0.3px;
+}
+.slot-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.slot-btn {
+  padding: 10px 16px; border-radius: 999px; font-size: 14px; font-weight: 600;
+  background: var(--night-card); border: 1px solid rgba(217,169,78,0.3); color: var(--night-ivory);
+  cursor: pointer; transition: all 0.25s;
+}
+.slot-btn:active { background: rgba(217,169,78,0.18); transform: scale(0.96); }
+.slot-annual { border-color: rgba(217,169,78,0.5); color: var(--night-gold-bright); }

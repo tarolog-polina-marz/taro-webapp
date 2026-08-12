@@ -31,13 +31,17 @@ const App = (() => {
     testimonials: [],
     spheres: [],
     plans: [],
+    shopItems: [],
+    shopItemsLoaded: false,
+    readingServices: [],
+    bookingSlots: [],
     loading: false,
     askLimitHit: false,    // дневной лимит вопросов исчерпан → показываем пейвол
     justDrawn: false,      // карта только что вытянута → играем 3D-переворот
     onboardingStep: 0,
     askSphere: null,       // выбранная сфера для вопроса
     drawing: false,        // анимация вытягивания карты
-    histTab: 'cards',      // история: 'cards' | 'questions'
+    histTab: 'all',        // история: 'all' | 'cards' | 'questions'
     resetAtMs: null,       // ближайшая полночь МСК (таймер до сброса), ms epoch
     serverOffsetMs: 0,     // серверное время МСК − локальное
   };
@@ -54,6 +58,15 @@ const App = (() => {
     if (screen === 'history' && !state.cardHistoryLoaded) {
       state.cardHistoryLoaded = true;
       loadHistory().then(() => render());
+      // Вопросы подтягиваются отдельно — чтобы лента «Всё» была полной.
+      loadReadings().then(() => render());
+    }
+    if (screen === 'shop' && !state.shopItemsLoaded) {
+      loadShopItems().then(() => render());
+    }
+    if (screen === 'booking' && !state.bookingSlots.length) {
+      loadReadingServices();
+      loadBookingSlots();
     }
   }
 
@@ -108,28 +121,41 @@ const App = (() => {
   }
 
   // ── Данные ──
-  // Отклик: максимум параллельности. Критичный путь — только me;
-  // остальное подтягивается одновременно и не блокирует первый экран.
+  // Отклик: максимум параллельности. Критичный путь — только me и анкета
+  // (нужна до онбординга); остальное подтягивается фоном и не блокирует
+  // первый экран (раньше один медленный ответ «завешивал» весь Mini App).
   async function loadBase() {
     const me = await Api.call('me', {});
     if (me.ok) state.profile = me.profile;
-    const secondary = Promise.all([
-      Api.call('questionnaire', {}),
-      Api.call('spheres', {}),
-      Api.call('plans', {}),
-      Api.call('testimonials', {}),
-    ]).then(([q, sp, pl, t]) => {
+
+    // Критично: анкета (вопросы онбординга + обязательные ответы).
+    const critical = Api.call('questionnaire', {}).then(q => {
       if (q.ok) {
         state.questions = q.questions;
         state.answers = q.answers;
         if (q.profile) state.profile = q.profile;
       }
+    });
+
+    // Фоновая подгрузка: не ждём — дорисуются сами.
+    const background = Promise.all([
+      Api.call('spheres', {}),
+      Api.call('plans', {}),
+      Api.call('testimonials', {}),
+      Api.call('reading_history', { limit: 30 }),
+    ]).then(([sp, pl, t, rh]) => {
       if (sp.ok) state.spheres = sp.spheres;
       if (pl.ok) state.plans = pl.plans;
       if (t.ok) state.testimonials = t.testimonials || [];
-    });
-    // Анкета нужна до онбординга/карты — дожидаемся её; тарифы/отзывы — нет.
-    await secondary;
+      // Предзагрузка истории вопросов: видна и в «Истории», и под формой «Спросить».
+      if (rh.ok) { state.readings = rh.readings || []; state.readingsLoaded = true; }
+      // Данные пришли — точечно обновляем текущий экран.
+      if (state.screen === 'plans') go('plans', { push: false });
+      else render();
+    }).catch(() => { /* фон не роняет приложение */ });
+
+    await critical;
+    return background;
   }
 
   async function loadTodayCard() {
@@ -304,6 +330,53 @@ const App = (() => {
     render();
   }
 
+  // ── Магазин: загрузка товаров ──
+  async function loadShopItems() {
+    if (state.shopItemsLoaded) return;
+    const res = await Api.call('shop_items', {});
+    if (res.ok) { state.shopItems = res.items; state.shopItemsLoaded = true; }
+    else render();
+  }
+
+  // ── Запись к Полине: услуги + слоты ──
+  async function loadReadingServices() {
+    const res = await Api.call('reading_services', {});
+    if (res.ok) state.readingServices = res.services;
+    render();
+  }
+
+  async function loadBookingSlots() {
+    const res = await Api.call('booking_slots', { service_slug: 'one_question' });
+    if (res.ok) state.bookingSlots = res.slots;
+    render();
+  }
+
+  async function bookSlot(slotId) {
+    state.loading = true; render();
+    const res = await Api.call('book_slot', { slot_id: slotId });
+    state.loading = false;
+    if (!res.ok) {
+      TaroUI.toast(res.error || 'Не получилось забронировать 🙈', { kind: 'error' });
+      render();
+      return;
+    }
+    const b = res.booking;
+    tg?.HapticFeedback?.notificationOccurred('success');
+    // Переход к оплате через deep link
+    if (b.deep_link) {
+      if (tg?.openTelegramLink) tg.openTelegramLink(b.deep_link);
+      else window.open(b.deep_link, '_blank');
+    } else {
+      TaroUI.toast(`Запись создана! ${b.service_name} — ${b.stars} ⭐`, { kind: 'success' });
+    }
+  }
+
+  function openPolina() {
+    const url = 'https://t.me/PolinaMarz';
+    if (tg?.openTelegramLink) tg.openTelegramLink(url);
+    else window.open(url, '_blank');
+  }
+
   // ── Оплата ──
   async function payPlan(planCode) {
     state.loading = true; render();
@@ -317,6 +390,12 @@ const App = (() => {
     const link = res.deep_link;
     if (tg?.openTelegramLink) tg.openTelegramLink(link);
     else window.open(link, '_blank');
+  }
+
+  async function payShopItem(slug) {
+    // Пока оплата через Stars для товаров не реализована — переброс на Полину
+    TaroUI.toast('Оплата товаров скоро! А пока — напиши Полине 🙏');
+    setTimeout(() => openPolina(), 1200);
   }
 
   function openChannel() {
@@ -357,6 +436,8 @@ const App = (() => {
     submitAnswer, skipQuestion, drawCard, reviewCard,
     setAskSphere, askCard, payPlan, openChannel,
     startOnboarding, loadQuestionnaire, setHistTab, saveCardTime,
+    loadShopItems, loadReadingServices, loadBookingSlots, bookSlot, openPolina,
+    payShopItem,
   };
 })();
 
@@ -368,6 +449,7 @@ const Api = (() => {
   // Действия, которые НЕ безопасно повторять при сбое
   // (могут списать лимит или создать платёж дважды)
   const NO_RETRY = new Set(['ask_card', 'start_payment']);
+  const FETCH_TIMEOUT_MS = 30000; // без таймаута fetch висит вечно → «зависание»
 
   async function call(action, payload = {}, { retries = 1 } = {}) {
     try {
@@ -376,11 +458,19 @@ const Api = (() => {
       if (window.TARO_ANON_KEY) {
         headers['Authorization'] = 'B' + 'earer ' + window.TARO_ANON_KEY;
       }
-      const res = await fetch(base, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ action, initData, ...payload }),
-      });
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+      let res;
+      try {
+        res = await fetch(base, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ action, initData, ...payload }),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timer);
+      }
       if (!res.ok) {
         // Читаем текст ошибки из тела вместо безликого «HTTP 500»
         let msg = `Сбой на сервере. Попробуй ещё раз 🙏`;
@@ -480,6 +570,16 @@ const Screens = {
       <div class="next-step-arrow">›</div>
     </div>`;
 
+    // Воронка: личный расклад у Полины
+    const polinaStep = `<div class="next-step polina-step" onclick="App.go('booking')">
+      <div class="next-step-icon">✦</div>
+      <div class="next-step-text">
+        <div class="next-step-title">Личный расклад у Полины</div>
+        <div class="next-step-sub">Живой разбор твоей ситуации — запись через календарь</div>
+      </div>
+      <div class="next-step-arrow">›</div>
+    </div>`;
+
     const body = `
       <div class="card-stage">
         <div class="flip-card ${s.justDrawn ? '' : 'flipped'}">
@@ -501,6 +601,7 @@ const Screens = {
       </div>
       ${reviewBlock}
       ${nextStep}
+      ${polinaStep}
       <div class="tui-hint" style="margin-top:14px">
         Новая карта через <span id="reset_timer" class="reset-timer">…</span> ·
         <span class="linklike" onclick="App.go('history')">История твоих карт ›</span>
@@ -800,6 +901,137 @@ const Screens = {
       }) + tabs;
   },
 
+  // ═══ МАГАЗИН ═══
+  shop(s) {
+    const tabs = TaroUI.tabBar(TABS, 'shop');
+    if (s.loading) return TaroUI.spinner() + tabs;
+
+    const items = s.shopItems || [];
+    if (!items.length && !s.shopItemsLoaded) {
+      return TaroUI.screenHeader('Магазин') + TaroUI.spinner() + tabs;
+    }
+
+    // Группируем по типу
+    const groups = {
+      deck: { label: 'Колоды', items: items.filter(i => i.product_type === 'deck') },
+      service: { label: 'Услуги', items: items.filter(i => i.product_type === 'service') },
+      goods: { label: 'Товары', items: items.filter(i => i.product_type === 'goods') },
+    };
+
+    const typeIcon = { deck: '🃏', service: '✧', goods: '🕯' };
+    const typeLabel = { deck: 'Колода', service: 'Услуга', goods: 'Товар' };
+
+    const itemCard = (item) => {
+      const price = `$${(item.price_cents / 100).toFixed(0)}`;
+      const delivery = item.requires_delivery ? ' · доставка ПВЗ Ozon' : '';
+      return `
+        <div class="shop-item">
+          <div class="shop-item-type">${typeIcon[item.product_type] || '✦'} ${typeLabel[item.product_type] || ''}</div>
+          <div class="shop-item-name">${TaroUI.esc(item.name_ru)}</div>
+          <div class="shop-item-price">${price}</div>
+          <div class="shop-item-desc">${TaroUI.esc(item.description)}</div>
+          <button class="tui-btn tui-btn-primary tui-btn-full" onclick="App.payShopItem('${item.slug}')">${price} — купить</button>
+          ${delivery ? `<div class="tui-hint">${delivery}</div>` : ''}
+        </div>`;
+    };
+
+    const polinaCTA = `
+      <div class="polina-cta" onclick="App.go('booking')">
+        <div class="polina-cta-icon">✧</div>
+        <div class="polina-cta-text">
+          <div class="polina-cta-title">Личный расклад у Полины</div>
+          <div class="polina-cta-sub">Запишись на живой расклад — Полина разберёт твою ситуацию</div>
+        </div>
+        <div class="polina-cta-arrow">›</div>
+      </div>`;
+
+    let body = `
+      <div class="shop-intro">
+        <h2 class="shop-title">Магазин</h2>
+        <p class="shop-sub">Колоды, свечи, услуги — всё для практики таро. Доставка по всему СНГ.</p>
+      </div>
+      ${polinaCTA}`;
+
+    for (const [type, group] of Object.entries(groups)) {
+      if (!group.items.length) continue;
+      body += `
+        <div class="shop-group">
+          <div class="shop-group-title">${group.label}</div>
+          ${group.items.map(itemCard).join('')}
+        </div>`;
+    }
+
+    body += `
+      <div class="shop-individual">
+        <div class="shop-individual-title">Индивидуальный заказ</div>
+        <p class="shop-individual-text">Не нашёл подходящее? Опиши свою ситуацию — Полина решит, сможет ли помочь.</p>
+        <button class="tui-btn tui-btn-secondary tui-btn-full" onclick="App.openPolina()">Написать Полине ›</button>
+      </div>`;
+
+    return TaroUI.screenHeader('Магазин') + body + tabs;
+  },
+
+  // ═══ ЗАПИСЬ К ПОЛИНЕ ═══
+  booking(s) {
+    if (s.loading) return TaroUI.spinner();
+
+    const slots = s.bookingSlots || [];
+    const services = s.readingServices || [];
+
+    // Группируем слоты по дате
+    const byDate = {};
+    for (const slot of slots) {
+      if (!byDate[slot.date]) byDate[slot.date] = [];
+      byDate[slot.date].push(slot);
+    }
+
+    const dates = Object.keys(byDate).sort();
+
+    const dateCard = (date) => {
+      const daySlots = byDate[date];
+      const dateLabel = _fmtDateLong(date);
+      const timeBtns = daySlots.map(slot => {
+        const timeStr = String(slot.time).slice(0, 5);
+        const isAnnual = slot.type === 'annual_only';
+        return `<button class="slot-btn ${isAnnual ? 'slot-annual' : ''}" onclick="App.bookSlot('${slot.id}')">${timeStr}${isAnnual ? ' ★' : ''}</button>`;
+      }).join('');
+      return `
+        <div class="booking-date">
+          <div class="booking-date-label">${dateLabel}</div>
+          <div class="slot-row">${timeBtns}</div>
+        </div>`;
+    };
+
+    const servicesList = services.map(sv => {
+      const price = `$${(sv.price_cents / 100).toFixed(0)}`;
+      return `<div class="service-row">
+        <div class="service-name">${TaroUI.esc(sv.name_ru)}</div>
+        <div class="service-meta">${sv.duration_min} мин · ${price}</div>
+      </div>`;
+    }).join('');
+
+    const body = `
+      <div class="booking-intro">
+        <h2 class="booking-title">Запись к Полине</h2>
+        <p class="booking-sub">Выбери удобное время — расклад делается лично, срок ~3 дня. 100% предоплата через Telegram Stars.</p>
+      </div>
+      ${servicesList ? `<div class="booking-services">${servicesList}</div>` : ''}
+      <div class="booking-slots">
+        <div class="booking-slots-title">Свободные слоты</div>
+        ${dates.length
+          ? dates.map(dateCard).join('')
+          : (slots.length === 0
+            ? TaroUI.empty('Слоты загружаются…', 'Подожди пару секунд')
+            : TaroUI.empty('Все слоты заняты', 'Полина откроет новые скоро — загляни позже'))
+        }
+      </div>
+      <div class="tui-hint" style="margin-top:16px">
+        Нужна срочная консультация? <span class="linklike" onclick="App.openPolina()">Напиши Полине напрямую ›</span>
+      </div>`;
+
+    return TaroUI.screenHeader('Запись к Полине', { back: true }) + body;
+  },
+
   _displayValue(q, val) {
     if (!val) return '';
     if (q.question_type === 'select' && q.options?.length) {
@@ -862,6 +1094,14 @@ function _fmtDate(iso) {
   const [y, m, d] = String(iso).slice(0, 10).split('-');
   return `${d}.${m}.${y}`;
 }
+function _fmtDateLong(iso) {
+  if (!iso) return '';
+  const days = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
+  const months = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+  const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return `${days[dt.getUTCDay()]}, ${d} ${months[m - 1]}`;
+}
 function _fmtDateTime(iso) {
   if (!iso) return '';
   const s = String(iso);
@@ -884,7 +1124,8 @@ const TABS = [
   { id: 'home', icon: '✦', label: 'Карта дня' },
   { id: 'history', icon: '☽', label: 'История' },
   { id: 'ask', icon: '✧', label: 'Спросить' },
-  { id: 'plans', icon: '❖', label: 'Тарифы' },
+  { id: 'shop', icon: '❖', label: 'Магазин' },
+  { id: 'plans', icon: '★', label: 'Тарифы' },
   { id: 'profile', icon: '☉', label: 'Профиль' },
 ];
 
