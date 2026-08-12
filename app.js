@@ -44,6 +44,14 @@ const App = (() => {
     histTab: 'all',        // история: 'all' | 'cards' | 'questions'
     resetAtMs: null,       // ближайшая полночь МСК (таймер до сброса), ms epoch
     serverOffsetMs: 0,     // серверное время МСК − локальное
+    // ── Admin state ──
+    adminToken: sessionStorage.getItem('admin_token') || null,
+    adminTab: 'posts',     // posts | slots | products | broadcasts | profile
+    adminPosts: [],
+    adminSlots: [],
+    adminProducts: [],
+    adminBroadcasts: [],
+    adminEditing: null,    // currently editing item
   };
 
   const root = () => document.getElementById('screen');
@@ -455,6 +463,16 @@ const App = (() => {
     if (tg?.setHeaderColor) tg.setHeaderColor('#0d0c14');
     if (tg?.setBackgroundColor) tg.setBackgroundColor('#0d0c14');
 
+    // ── Admin mode: #admin in URL → admin login/dashboard ──
+    if (window.location.hash === '#admin' || window.location.hash === '#admin/') {
+      if (state.adminToken) {
+        go('admin_dashboard', { push: false });
+      } else {
+        go('admin_login', { push: false });
+      }
+      return;
+    }
+
     setLoading(true);
     try {
       await loadBase();
@@ -475,6 +493,197 @@ const App = (() => {
     }
   }
 
+  // ── Admin: API helpers ──
+  async function adminCall(action, payload = {}) {
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (window.TARO_ANON_KEY) {
+        headers['Authorization'] = 'B' + 'earer ' + window.TARO_ANON_KEY;
+      }
+      const body = { action, admin_token: state.adminToken, ...payload };
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 30000);
+      const res = await fetch(Api._base(), {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      if (!res.ok) {
+        let msg = 'Сбой на сервере';
+        try { const j = await res.json(); if (j?.error) msg = j.error; } catch { /* */ }
+        return { ok: false, error: msg };
+      }
+      return await res.json();
+    } catch (e) {
+      return { ok: false, error: 'Нет связи с сервером' };
+    }
+  }
+
+  async function adminLogin(login, password) {
+    state.loading = true; render();
+    const res = await Api.call('admin_login', { login, password });
+    state.loading = false;
+    if (!res.ok) {
+      TaroUI.toast(res.error || 'Не получилось 🙈', { kind: 'error' });
+      render();
+      return;
+    }
+    state.adminToken = res.token;
+    sessionStorage.setItem('admin_token', res.token);
+    tg?.HapticFeedback?.notificationOccurred('success');
+    go('admin_dashboard', { push: false });
+    await adminLoadTab('posts');
+  }
+
+  function adminLogout() {
+    state.adminToken = null;
+    sessionStorage.removeItem('admin_token');
+    state.adminPosts = [];
+    state.adminSlots = [];
+    state.adminProducts = [];
+    state.adminBroadcasts = [];
+    go('admin_login', { push: false });
+  }
+
+  async function adminLoadTab(tab) {
+    state.adminTab = tab;
+    render();
+    if (tab === 'posts' && !state.adminPosts.length) {
+      const res = await adminCall('admin_posts', { sub: 'list' });
+      if (res.ok) state.adminPosts = res.posts || [];
+    } else if (tab === 'slots' && !state.adminSlots.length) {
+      const res = await adminCall('admin_slots', { sub: 'list' });
+      if (res.ok) state.adminSlots = res.slots || [];
+    } else if (tab === 'products' && !state.adminProducts.length) {
+      const res = await adminCall('admin_products', { sub: 'list' });
+      if (res.ok) state.adminProducts = res.products || [];
+    } else if (tab === 'broadcasts' && !state.adminBroadcasts.length) {
+      const res = await adminCall('admin_broadcasts', { sub: 'list' });
+      if (res.ok) state.adminBroadcasts = res.broadcasts || [];
+    }
+    render();
+  }
+
+  async function adminSavePost(data) {
+    state.loading = true; render();
+    const sub = data.id ? 'update' : 'create';
+    const res = await adminCall('admin_posts', { sub, ...data });
+    state.loading = false;
+    if (!res.ok) { TaroUI.toast(res.error || 'Ошибка', { kind: 'error' }); render(); return; }
+    // Reload list
+    const list = await adminCall('admin_posts', { sub: 'list' });
+    if (list.ok) state.adminPosts = list.posts;
+    state.adminEditing = null;
+    tg?.HapticFeedback?.notificationOccurred('success');
+    TaroUI.toast('Сохранено ✨');
+    go('admin_dashboard', { push: false });
+    render();
+  }
+
+  async function adminDeletePost(id) {
+    TaroUI.confirm('Удалить пост?', 'Это действие нельзя отменить', async () => {
+      state.loading = true; render();
+      const res = await adminCall('admin_posts', { sub: 'delete', id });
+      state.loading = false;
+      if (!res.ok) { TaroUI.toast(res.error || 'Ошибка', { kind: 'error' }); render(); return; }
+      const list = await adminCall('admin_posts', { sub: 'list' });
+      if (list.ok) state.adminPosts = list.posts;
+      TaroUI.toast('Удалено');
+      render();
+    });
+  }
+
+  async function adminDeleteSlot(id) {
+    state.loading = true; render();
+    const res = await adminCall('admin_slots', { sub: 'delete', id });
+    state.loading = false;
+    if (!res.ok) { TaroUI.toast(res.error || 'Ошибка', { kind: 'error' }); render(); return; }
+    const list = await adminCall('admin_slots', { sub: 'list' });
+    if (list.ok) state.adminSlots = list.slots;
+    TaroUI.toast('Слот удалён');
+    render();
+  }
+
+  async function adminSaveSlot(data) {
+    state.loading = true; render();
+    const res = await adminCall('admin_slots', { sub: 'create', ...data });
+    state.loading = false;
+    if (!res.ok) { TaroUI.toast(res.error || 'Ошибка', { kind: 'error' }); render(); return; }
+    const list = await adminCall('admin_slots', { sub: 'list' });
+    if (list.ok) state.adminSlots = list.slots;
+    state.adminEditing = null;
+    TaroUI.toast('Слот добавлен ✨');
+    render();
+  }
+
+  async function adminSaveProduct(data) {
+    state.loading = true; render();
+    const sub = data.id ? 'update' : 'create';
+    const res = await adminCall('admin_products', { sub, ...data });
+    state.loading = false;
+    if (!res.ok) { TaroUI.toast(res.error || 'Ошибка', { kind: 'error' }); render(); return; }
+    const list = await adminCall('admin_products', { sub: 'list' });
+    if (list.ok) state.adminProducts = list.products;
+    state.adminEditing = null;
+    TaroUI.toast('Сохранено ✨');
+    render();
+  }
+
+  async function adminToggleProduct(id, isActive) {
+    const res = await adminCall('admin_products', { sub: 'update', id, is_active: isActive });
+    if (!res.ok) { TaroUI.toast(res.error || 'Ошибка', { kind: 'error' }); return; }
+    const list = await adminCall('admin_products', { sub: 'list' });
+    if (list.ok) state.adminProducts = list.products;
+    render();
+  }
+
+  async function adminSaveBroadcast(data) {
+    state.loading = true; render();
+    const res = await adminCall('admin_broadcasts', { sub: 'create', ...data });
+    state.loading = false;
+    if (!res.ok) { TaroUI.toast(res.error || 'Ошибка', { kind: 'error' }); render(); return; }
+    const list = await adminCall('admin_broadcasts', { sub: 'list' });
+    if (list.ok) state.adminBroadcasts = list.broadcasts;
+    state.adminEditing = null;
+    TaroUI.toast('Рассылка создана ✨');
+    render();
+  }
+
+  async function adminSendBroadcast(id) {
+    state.loading = true; render();
+    const res = await adminCall('admin_broadcasts', { sub: 'send', id });
+    state.loading = false;
+    if (!res.ok) { TaroUI.toast(res.error || 'Ошибка', { kind: 'error' }); render(); return; }
+    const list = await adminCall('admin_broadcasts', { sub: 'list' });
+    if (list.ok) state.adminBroadcasts = list.broadcasts;
+    TaroUI.toast('Рассылка запущена ✨');
+    render();
+  }
+
+  async function adminChangeCredentials() {
+    const newLogin = (document.getElementById('adm_new_login')?.value || '').trim();
+    const newPassword = (document.getElementById('adm_new_pass')?.value || '').trim();
+    if (!newLogin && !newPassword) { TaroUI.toast('Укажи логин или пароль'); return; }
+    state.loading = true; render();
+    const res = await adminCall('admin_change_credentials', { new_login: newLogin, new_password: newPassword });
+    state.loading = false;
+    if (!res.ok) { TaroUI.toast(res.error || 'Ошибка', { kind: 'error' }); render(); return; }
+    TaroUI.toast(res.note || 'Инструкция отправлена');
+    render();
+  }
+
+  function adminEdit(item) {
+    state.adminEditing = item;
+    render();
+  }
+
+  function adminSetTab(tab) {
+    state.adminTab = tab;
+    adminLoadTab(tab);
+  }
+
   return {
     state, go, back, render, init, setLoading,
     submitAnswer, skipQuestion, drawCard, reviewCard,
@@ -482,6 +691,11 @@ const App = (() => {
     startOnboarding, loadQuestionnaire, setHistTab, saveCardTime,
     loadShopItems, loadReadingServices, loadBookingSlots, bookSlot, openPolina,
     payShopItem, shareCard,
+    // Admin
+    adminLogin, adminLogout, adminLoadTab, adminSavePost, adminDeletePost,
+    adminDeleteSlot, adminSaveSlot, adminSaveProduct, adminToggleProduct,
+    adminSaveBroadcast, adminSendBroadcast, adminEdit, adminSetTab,
+    adminChangeCredentials,
   };
 })();
 
@@ -538,7 +752,7 @@ const Api = (() => {
       return { ok: false, error: 'Нет связи с сервером' };
     }
   }
-  return { call };
+  return { call, _base: () => base };
 })();
 
 // ── Экраны ──
@@ -1161,6 +1375,473 @@ const Screens = {
     return TaroUI.screenHeader(q.title, { back: true }) +
       TaroUI.section(TaroUI.hint(q.description || 'Ответь как чувствуешь — неверных ответов нет.', { align: 'left' })) +
       field + saveBtn + skipBtn;
+  },
+
+  // ══════════════════════════════════════════
+  // ═══ ADMIN: ЛОГИН ═══
+  // ══════════════════════════════════════════
+  admin_login(s) {
+    if (s.loading) return TaroUI.spinner();
+    const body = `
+      <div class="admin-login-wrap">
+        <div class="admin-login-icon">✦</div>
+        <h2 class="admin-login-title">Админ-панель</h2>
+        <p class="admin-login-sub">Вход для владельца</p>
+        <div class="admin-form">
+          <input class="tui-input admin-input" id="admin_login_field" type="text" placeholder="Логин" autocomplete="username">
+          <input class="tui-input admin-input" id="admin_password_field" type="password" placeholder="Пароль" autocomplete="current-password">
+          <button class="tui-btn tui-btn-primary tui-btn-full tui-btn-glow"
+            onclick="App.adminLogin(document.getElementById('admin_login_field').value, document.getElementById('admin_password_field').value)">
+            Войти ✦
+          </button>
+        </div>
+        <div class="tui-hint" style="margin-top:16px;text-align:center">
+          Только для владельца. Регистрации нет.
+        </div>
+      </div>`;
+    return body;
+  },
+
+  // ═══ ADMIN: ДАШБОРД ═══
+  admin_dashboard(s) {
+    if (!s.adminToken) { App.go('admin_login', { push: false }); return ''; }
+    if (s.loading) return TaroUI.spinner();
+
+    const tabs = [
+      { id: 'posts', icon: '✦', label: 'Блог' },
+      { id: 'slots', icon: '☽', label: 'Слоты' },
+      { id: 'products', icon: '❖', label: 'Товары' },
+      { id: 'broadcasts', icon: '✧', label: 'Рассылки' },
+      { id: 'profile', icon: '☉', label: 'Профиль' },
+    ];
+
+    const tabBarHtml = `<div class="admin-tabbar">
+      ${tabs.map(t => `<div class="admin-tab ${s.adminTab === t.id ? 'admin-tab-active' : ''}" onclick="App.adminSetTab('${t.id}')">
+        <span class="admin-tab-icon">${t.icon}</span>
+        <span class="admin-tab-label">${TaroUI.esc(t.label)}</span>
+      </div>`).join('')}
+    </div>`;
+
+    let content = '';
+    if (s.adminTab === 'posts') content = Screens._adminPosts(s);
+    else if (s.adminTab === 'slots') content = Screens._adminSlots(s);
+    else if (s.adminTab === 'products') content = Screens._adminProducts(s);
+    else if (s.adminTab === 'broadcasts') content = Screens._adminBroadcasts(s);
+    else if (s.adminTab === 'profile') content = Screens._adminProfile(s);
+
+    const header = `
+      <div class="admin-header">
+        <div class="admin-header-title">Админ-панель</div>
+        <div class="admin-logout" onclick="App.adminLogout()">Выйти</div>
+      </div>`;
+
+    return header + tabBarHtml + `<div class="admin-content">${content}</div>`;
+  },
+
+  // ═══ ADMIN: БЛОГ (посты) ═══
+  _adminPosts(s) {
+    if (s.adminEditing && s.adminEditing._type === 'post') {
+      return Screens._adminPostForm(s);
+    }
+    const posts = s.adminPosts || [];
+    const statusBadge = (st) => {
+      const cls = st === 'published' ? 'admin-badge-green' : st === 'scheduled' ? 'admin-badge-gold' : 'admin-badge-dim';
+      return `<span class="admin-badge ${cls}">${st}</span>`;
+    };
+    const items = posts.map(p => `
+      <div class="admin-item">
+        <div class="admin-item-row" onclick="this.classList.toggle('open')">
+          <div class="admin-item-emoji">${TaroUI.esc(p.cover_emoji || '✦')}</div>
+          <div class="admin-item-main">
+            <div class="admin-item-title">${TaroUI.esc(p.title)}</div>
+            <div class="admin-item-meta">${statusBadge(p.status)} · ${p.scheduled_at ? _fmtDate(p.scheduled_at.slice(0,10)) + ' ' + String(p.scheduled_at).slice(11,16) : p.published_at ? _fmtDate(p.published_at.slice(0,10)) : '—'}</div>
+          </div>
+          <div class="admin-item-chevron">›</div>
+        </div>
+        <div class="admin-item-actions">
+          <button class="tui-btn tui-btn-secondary tui-btn-small" onclick="App.adminEdit({...${JSON.stringify(p).replace(/"/g,'&quot;')}, _type:'post'})">Редактировать</button>
+          <button class="tui-btn tui-btn-primary tui-btn-small" onclick="App.adminSavePost({id:'${p.id}', status:'published'})">Опубликовать</button>
+          <button class="tui-btn tui-btn-text tui-btn-small admin-danger" onclick="App.adminDeletePost('${p.id}')">Удалить</button>
+        </div>
+      </div>
+    `).join('');
+
+    return `
+      <div class="admin-section-header">
+        <span>Блог — публикации</span>
+        <button class="tui-btn tui-btn-primary tui-btn-small" onclick="App.adminEdit({_type:'post', status:'draft'})">+ Новый пост</button>
+      </div>
+      ${items ? `<div class="admin-list">${items}</div>` : TaroUI.empty('Постов нет', 'Создай первый пост')}`;
+  },
+
+  _adminPostForm(s) {
+    const p = s.adminEditing || {};
+    const isEdit = !!p.id;
+    const body = `
+      <div class="admin-form-wrap">
+        <div class="admin-form-back" onclick="App.adminEdit(null)">‹ Назад к списку</div>
+        <h3 class="admin-form-title">${isEdit ? 'Редактировать пост' : 'Новый пост'}</h3>
+        <div class="admin-form-field">
+          <label class="admin-label">Заголовок</label>
+          <input class="tui-input" id="post_title" type="text" value="${TaroUI.esc(p.title || '')}" placeholder="Заголовок поста">
+        </div>
+        <div class="admin-form-field">
+          <label class="admin-label">Slug (URL)</label>
+          <input class="tui-input" id="post_slug" type="text" value="${TaroUI.esc(p.slug || '')}" placeholder="auto">
+        </div>
+        <div class="admin-form-field">
+          <label class="admin-label">Эмодзи-обложка</label>
+          <input class="tui-input" id="post_emoji" type="text" value="${TaroUI.esc(p.cover_emoji || '✦')}" maxlength="2">
+        </div>
+        <div class="admin-form-field">
+          <label class="admin-label">Краткое описание</label>
+          <textarea class="tui-input" id="post_excerpt" rows="2" placeholder="Анонс">${TaroUI.esc(p.excerpt || '')}</textarea>
+        </div>
+        <div class="admin-form-field">
+          <label class="admin-label">Текст (markdown)</label>
+          <textarea class="tui-input admin-textarea-md" id="post_body" rows="12" placeholder="Текст поста в markdown...">${TaroUI.esc(p.body_md || p.body || '')}</textarea>
+        </div>
+        <div class="admin-form-field">
+          <label class="admin-label">Статус</label>
+          <select class="tui-input" id="post_status">
+            <option value="draft" ${p.status === 'draft' ? 'selected' : ''}>Черновик</option>
+            <option value="scheduled" ${p.status === 'scheduled' ? 'selected' : ''}>Запланирован</option>
+            <option value="published" ${p.status === 'published' ? 'selected' : ''}>Опубликован</option>
+          </select>
+        </div>
+        <div class="admin-form-field">
+          <label class="admin-label">Дата/время публикации (для scheduled)</label>
+          <input class="tui-input" id="post_scheduled" type="datetime-local" value="${p.scheduled_at ? p.scheduled_at.slice(0,16) : ''}">
+        </div>
+        <button class="tui-btn tui-btn-primary tui-btn-full tui-btn-glow"
+          onclick="App.adminSavePost({
+            id: ${p.id ? `'${p.id}'` : 'null'},
+            title: document.getElementById('post_title').value,
+            slug: document.getElementById('post_slug').value,
+            cover_emoji: document.getElementById('post_emoji').value,
+            excerpt: document.getElementById('post_excerpt').value,
+            body: document.getElementById('post_body').value,
+            status: document.getElementById('post_status').value,
+            scheduled_at: document.getElementById('post_scheduled').value || null
+          })">
+          Сохранить ✦
+        </button>
+      </div>`;
+    return body;
+  },
+
+  // ═══ ADMIN: СЛОТЫ ═══
+  _adminSlots(s) {
+    if (s.adminEditing && s.adminEditing._type === 'slot') {
+      return Screens._adminSlotForm(s);
+    }
+    const slots = s.adminSlots || [];
+    // Group by date
+    const byDate = {};
+    for (const sl of slots) {
+      if (!byDate[sl.date]) byDate[sl.date] = [];
+      byDate[sl.date].push(sl);
+    }
+    const dates = Object.keys(byDate).sort();
+
+    const dateCard = (date) => {
+      const daySlots = byDate[date];
+      const slotItems = daySlots.map(sl => {
+        const timeStr = String(sl.time).slice(0, 5);
+        const isBooked = sl.status === 'booked';
+        const isFree = sl.status === 'free';
+        const statusCls = isBooked ? 'admin-slot-booked' : 'admin-slot-free';
+        const bookingInfo = isBooked ? `
+          <div class="admin-slot-info">
+            ${sl.profile ? TaroUI.esc(sl.profile.first_name || sl.profile.username || '—') : '—'}
+            · ${sl.service ? TaroUI.esc(sl.service.name) : '—'}
+            ${sl.payment ? ` · ${sl.payment.status === 'paid' ? '✓ оплачено' : '⏳ не оплачено'}` : ''}
+          </div>` : '';
+        return `<div class="admin-slot-item ${statusCls}">
+          <div class="admin-slot-time">${timeStr}</div>
+          <div class="admin-slot-details">
+            <span class="admin-slot-status">${isBooked ? 'Занят' : 'Свободен'}</span>
+            ${sl.service ? `<span class="admin-slot-service">${TaroUI.esc(sl.service.name)}</span>` : ''}
+            ${bookingInfo}
+          </div>
+          ${isFree ? `<button class="tui-btn tui-btn-text tui-btn-small admin-danger" onclick="App.adminDeleteSlot('${sl.id}')">Удалить</button>` : ''}
+        </div>`;
+      }).join('');
+      return `<div class="admin-date-group">
+        <div class="admin-date-label">${_fmtDateLong(date)}</div>
+        ${slotItems}
+      </div>`;
+    };
+
+    return `
+      <div class="admin-section-header">
+        <span>Слоты записи (14 дней)</span>
+        <button class="tui-btn tui-btn-primary tui-btn-small" onclick="App.adminEdit({_type:'slot'})">+ Добавить слот</button>
+      </div>
+      ${dates.length ? dates.map(dateCard).join('') : TaroUI.empty('Слотов нет', 'Добавь первый слот для записи')}`;
+  },
+
+  _adminSlotForm(s) {
+    const today = _todayIso();
+    return `
+      <div class="admin-form-wrap">
+        <div class="admin-form-back" onclick="App.adminEdit(null)">‹ Назад</div>
+        <h3 class="admin-form-title">Новый слот</h3>
+        <div class="admin-form-field">
+          <label class="admin-label">Дата</label>
+          <input class="tui-input" id="slot_date" type="date" value="${today}">
+        </div>
+        <div class="admin-form-field">
+          <label class="admin-label">Время (МСК)</label>
+          <input class="tui-input" id="slot_time" type="time" value="12:00">
+        </div>
+        <div class="admin-form-field">
+          <label class="admin-label">Тип</label>
+          <select class="tui-input" id="slot_type">
+            <option value="real">Обычный</option>
+            <option value="annual_only">Только для премиум</option>
+          </select>
+        </div>
+        <div class="admin-form-field">
+          <label class="admin-label">Длительность (мин)</label>
+          <input class="tui-input" id="slot_duration" type="number" value="30" min="15" max="120">
+        </div>
+        <button class="tui-btn tui-btn-primary tui-btn-full tui-btn-glow"
+          onclick="App.adminSaveSlot({
+            slot_date: document.getElementById('slot_date').value,
+            starts_at: document.getElementById('slot_time').value,
+            slot_type: document.getElementById('slot_type').value,
+            duration_min: document.getElementById('slot_duration').value
+          })">
+          Добавить слот ✦
+        </button>
+      </div>`;
+  },
+
+  // ═══ ADMIN: ТОВАРЫ ═══
+  _adminProducts(s) {
+    if (s.adminEditing && s.adminEditing._type === 'product') {
+      return Screens._adminProductForm(s);
+    }
+    const products = s.adminProducts || [];
+    const typeLabel = { deck: 'Колоды', service: 'Услуги', goods: 'Товары' };
+    const groups = {};
+    for (const p of products) {
+      const t = p.product_type || 'goods';
+      if (!groups[t]) groups[t] = [];
+      groups[t].push(p);
+    }
+
+    const itemCard = (p) => {
+      const price = `$${(p.price_usd_cents / 100).toFixed(2)}`;
+      const active = p.is_active;
+      return `<div class="admin-item">
+        <div class="admin-item-row">
+          <div class="admin-item-emoji">❖</div>
+          <div class="admin-item-main">
+            <div class="admin-item-title">${TaroUI.esc(p.name_ru)}</div>
+            <div class="admin-item-meta">${price} · ${active ? 'виден' : 'скрыт'}</div>
+          </div>
+        </div>
+        <div class="admin-item-actions">
+          <button class="tui-btn tui-btn-secondary tui-btn-small" onclick="App.adminEdit({...${JSON.stringify(p).replace(/"/g,'&quot;')}, _type:'product'})">Изменить</button>
+          <button class="tui-btn tui-btn-${active ? 'text' : 'primary'} tui-btn-small" onclick="App.adminToggleProduct('${p.id}', ${!active})">${active ? 'Скрыть' : 'Показать'}</button>
+        </div>
+      </div>`;
+    };
+
+    let html = `<div class="admin-section-header">
+      <span>Товары магазина</span>
+      <button class="tui-btn tui-btn-primary tui-btn-small" onclick="App.adminEdit({_type:'product', product_type:'goods', is_active:true, price_usd_cents:0})">+ Добавить товар</button>
+    </div>`;
+
+    for (const [type, items] of Object.entries(groups)) {
+      html += `<div class="admin-group-title">${typeLabel[type] || type}</div>`;
+      html += `<div class="admin-list">${items.map(itemCard).join('')}</div>`;
+    }
+    if (!products.length) html += TaroUI.empty('Товаров нет', 'Добавь первый товар');
+    return html;
+  },
+
+  _adminProductForm(s) {
+    const p = s.adminEditing || {};
+    const isEdit = !!p.id;
+    return `
+      <div class="admin-form-wrap">
+        <div class="admin-form-back" onclick="App.adminEdit(null)">‹ Назад</div>
+        <h3 class="admin-form-title">${isEdit ? 'Редактировать товар' : 'Новый товар'}</h3>
+        <div class="admin-form-field">
+          <label class="admin-label">Название</label>
+          <input class="tui-input" id="prod_name" type="text" value="${TaroUI.esc(p.name_ru || '')}" placeholder="Название товара">
+        </div>
+        <div class="admin-form-field">
+          <label class="admin-label">Slug (URL)</label>
+          <input class="tui-input" id="prod_slug" type="text" value="${TaroUI.esc(p.slug || '')}" placeholder="auto">
+        </div>
+        <div class="admin-form-field">
+          <label class="admin-label">Описание</label>
+          <textarea class="tui-input" id="prod_desc" rows="3" placeholder="Описание товара">${TaroUI.esc(p.description || '')}</textarea>
+        </div>
+        <div class="admin-form-field">
+          <label class="admin-label">Цена (центы, $1 = 100)</label>
+          <input class="tui-input" id="prod_price" type="number" value="${p.price_usd_cents || 0}" min="0">
+        </div>
+        <div class="admin-form-field">
+          <label class="admin-label">Тип</label>
+          <select class="tui-input" id="prod_type">
+            <option value="goods" ${p.product_type === 'goods' ? 'selected' : ''}>Товар</option>
+            <option value="deck" ${p.product_type === 'deck' ? 'selected' : ''}>Колода</option>
+            <option value="service" ${p.product_type === 'service' ? 'selected' : ''}>Услуга</option>
+          </select>
+        </div>
+        <div class="admin-form-field">
+          <label class="admin-label">Активен</label>
+          <select class="tui-input" id="prod_active">
+            <option value="true" ${p.is_active !== false ? 'selected' : ''}>Да (виден в магазине)</option>
+            <option value="false" ${p.is_active === false ? 'selected' : ''}>Нет (скрыт)</option>
+          </select>
+        </div>
+        <button class="tui-btn tui-btn-primary tui-btn-full tui-btn-glow"
+          onclick="App.adminSaveProduct({
+            id: ${p.id ? `'${p.id}'` : 'null'},
+            name: document.getElementById('prod_name').value,
+            slug: document.getElementById('prod_slug').value,
+            description: document.getElementById('prod_desc').value,
+            price_usd_cents: parseInt(document.getElementById('prod_price').value),
+            product_type: document.getElementById('prod_type').value,
+            is_active: document.getElementById('prod_active').value === 'true'
+          })">
+          Сохранить ✦
+        </button>
+      </div>`;
+  },
+
+  // ═══ ADMIN: РАССЫЛКИ ═══
+  _adminBroadcasts(s) {
+    if (s.adminEditing && s.adminEditing._type === 'broadcast') {
+      return Screens._adminBroadcastForm(s);
+    }
+    const items = (s.adminBroadcasts || []).map(b => {
+      const statusBadge = (st) => {
+        const cls = st === 'sent' ? 'admin-badge-green' : st === 'sending' ? 'admin-badge-gold' : st === 'scheduled' ? 'admin-badge-gold' : 'admin-badge-dim';
+        return `<span class="admin-badge ${cls}">${st}</span>`;
+      };
+      const stats = `Отправлено: ${b.sent_count || 0} · Открыто: ${b.opened_count || 0} · Конверсия: ${b.converted_count || 0}`;
+      const rule = b.segment_rule ? JSON.stringify(b.segment_rule) : '{}';
+      return `<div class="admin-item">
+        <div class="admin-item-row" onclick="this.classList.toggle('open')">
+          <div class="admin-item-emoji">✧</div>
+          <div class="admin-item-main">
+            <div class="admin-item-title">${TaroUI.esc(b.title)}</div>
+            <div class="admin-item-meta">${statusBadge(b.status)} · ${stats}</div>
+          </div>
+          <div class="admin-item-chevron">›</div>
+        </div>
+        <div class="admin-item-detail">
+          <p class="admin-broadcast-body">${TaroUI.esc(b.body)}</p>
+          <div class="admin-item-actions">
+            ${(b.status === 'draft' || b.status === 'scheduled') ? `<button class="tui-btn tui-btn-primary tui-btn-small" onclick="App.adminSendBroadcast('${b.id}')">Отправить сейчас</button>` : ''}
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+
+    return `
+      <div class="admin-section-header">
+        <span>Рассылки</span>
+        <button class="tui-btn tui-btn-primary tui-btn-small" onclick="App.adminEdit({_type:'broadcast', status:'draft', segment_rule:{}})">+ Новая рассылка</button>
+      </div>
+      ${items ? `<div class="admin-list">${items}</div>` : TaroUI.empty('Рассылок нет', 'Создай первую рассылку')}`;
+  },
+
+  _adminBroadcastForm(s) {
+    const b = s.adminEditing || {};
+    return `
+      <div class="admin-form-wrap">
+        <div class="admin-form-back" onclick="App.adminEdit(null)">‹ Назад</div>
+        <h3 class="admin-form-title">Новая рассылка</h3>
+        <div class="admin-form-field">
+          <label class="admin-label">Заголовок</label>
+          <input class="tui-input" id="bc_title" type="text" placeholder="Заголовок рассылки">
+        </div>
+        <div class="admin-form-field">
+          <label class="admin-label">Текст</label>
+          <textarea class="tui-input admin-textarea-md" id="bc_body" rows="6" placeholder="Текст рассылки..."></textarea>
+        </div>
+        <div class="admin-form-field">
+          <label class="admin-label">Фильтр по тарифу</label>
+          <select class="tui-input" id="bc_tier">
+            <option value="">Все</option>
+            <option value="free">Free</option>
+            <option value="basic">Basic</option>
+            <option value="standard">Standard</option>
+            <option value="premium">Premium</option>
+          </select>
+        </div>
+        <div class="admin-form-field">
+          <label class="admin-label">Фильтр по сфере</label>
+          <select class="tui-input" id="bc_sphere">
+            <option value="">Все сферы</option>
+            <option value="love">Любовь</option>
+            <option value="finance">Финансы</option>
+            <option value="health">Здоровье</option>
+            <option value="family">Семья</option>
+            <option value="purpose">Предназначение</option>
+          </select>
+        </div>
+        <div class="admin-form-field">
+          <label class="admin-label">Статус</label>
+          <select class="tui-input" id="bc_status">
+            <option value="draft">Черновик</option>
+            <option value="scheduled">Запланирована</option>
+          </select>
+        </div>
+        <div class="admin-form-field">
+          <label class="admin-label">Дата/время (для scheduled)</label>
+          <input class="tui-input" id="bc_scheduled" type="datetime-local">
+        </div>
+        <button class="tui-btn tui-btn-primary tui-btn-full tui-btn-glow"
+          onclick="App.adminSaveBroadcast({
+            title: document.getElementById('bc_title').value,
+            body: document.getElementById('bc_body').value,
+            segment_rule: {
+              tier: document.getElementById('bc_tier').value ? [document.getElementById('bc_tier').value] : null,
+              spheres: document.getElementById('bc_sphere').value ? [document.getElementById('bc_sphere').value] : null
+            },
+            status: document.getElementById('bc_status').value,
+            scheduled_at: document.getElementById('bc_scheduled').value || null
+          })">
+          Создать рассылку ✦
+        </button>
+      </div>`;
+  },
+
+  // ═══ ADMIN: ПРОФИЛЬ ═══
+  _adminProfile(s) {
+    return `
+      <div class="admin-profile-wrap">
+        <div class="admin-profile-icon">✦</div>
+        <h3 class="admin-form-title">Профиль владельца</h3>
+        <div class="tui-hint" style="margin-bottom:16px;text-align:center">
+          Для смены логина/пароля обнови секреты Edge Function:
+          <code class="admin-code">supabase secrets set ADMIN_LOGIN=новый_логин ADMIN_PASSWORD=новый_пароль</code>
+        </div>
+        <div class="admin-form-field">
+          <label class="admin-label">Новый логин</label>
+          <input class="tui-input" id="adm_new_login" type="text" placeholder="Новый логин">
+        </div>
+        <div class="admin-form-field">
+          <label class="admin-label">Новый пароль</label>
+          <input class="tui-input" id="adm_new_pass" type="password" placeholder="Новый пароль">
+        </div>
+        <button class="tui-btn tui-btn-secondary tui-btn-full"
+          onclick="App.adminChangeCredentials()">
+          Запросить смену ✦
+        </button>
+        <div class="tui-hint" style="margin-top:12px;text-align:center">
+          После смены секретов перезагрузи Edge Function.
+        </div>
+      </div>`;
   },
 };
 
