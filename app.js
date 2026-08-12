@@ -372,7 +372,8 @@ const App = (() => {
   }
 
   function openPolina() {
-    const url = 'https://t.me/PolinaMarz';
+    // Воронка: всё через бота. Канал Полины — для контента, не для заказов.
+    const url = 'https://t.me/tarolog_polina_marz_channel';
     if (tg?.openTelegramLink) tg.openTelegramLink(url);
     else window.open(url, '_blank');
   }
@@ -1028,7 +1029,7 @@ const Screens = {
       <div class="shop-individual">
         <div class="shop-individual-title">Индивидуальный заказ</div>
         <p class="shop-individual-text">Не нашёл подходящее? Опиши свою ситуацию — Полина решит, сможет ли помочь.</p>
-        <button class="tui-btn tui-btn-secondary tui-btn-full" onclick="App.openPolina()">Написать Полине ›</button>
+        <button class="tui-btn tui-btn-secondary tui-btn-full" onclick="App.openPolina()">Канал Полины ›</button>
       </div>`;
 
     return TaroUI.screenHeader('Магазин') + body + tabs;
@@ -1089,7 +1090,7 @@ const Screens = {
         }
       </div>
       <div class="tui-hint" style="margin-top:16px">
-        Нужна срочная консультация? +50% — <span class="linklike" onclick="App.openPolina()">Напиши Полине напрямую ›</span>
+        Нужна срочная консультация? +50% — <span class="linklike" onclick="App.openPolina()">Канал Полины ›</span>
       </div>`;
 
     return TaroUI.screenHeader('Запись к Полине', { back: true }) + body;
