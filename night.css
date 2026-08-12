@@ -700,3 +700,95 @@ body::before {
 }
 .slot-btn:active { background: rgba(217,169,78,0.18); transform: scale(0.96); }
 .slot-annual { border-color: rgba(217,169,78,0.5); color: var(--night-gold-bright); }
+
+/* ════════════ WELCOME: приветственный экран ════════════ */
+.welcome {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-height: 70vh; padding: 30px 24px; text-align: center;
+  animation: night-rise 0.5s ease both;
+}
+.welcome-icon {
+  font-size: 56px; color: var(--night-gold-bright);
+  text-shadow: 0 0 32px rgba(236,196,111,0.7);
+  margin-bottom: 22px;
+  animation: night-star-pulse 2.6s ease-in-out infinite;
+}
+.welcome-title {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 30px; font-weight: 600; color: var(--night-ivory);
+  margin: 0 0 16px; line-height: 1.2;
+}
+.welcome-text {
+  color: var(--night-muted); font-size: 15px; line-height: 1.6;
+  margin: 0 0 30px; max-width: 320px;
+}
+
+/* ════════════ CONFIRM: экран подтверждения записи ════════════ */
+.confirm-screen {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-height: 65vh; padding: 30px 24px; text-align: center;
+  animation: night-rise 0.5s ease both;
+}
+.confirm-icon {
+  font-size: 52px; color: var(--night-gold-bright);
+  text-shadow: 0 0 28px rgba(236,196,111,0.6);
+  margin-bottom: 18px;
+  animation: night-star-pulse 2.6s ease-in-out infinite;
+}
+.confirm-title {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 26px; font-weight: 600; color: var(--night-ivory);
+  margin: 0 0 22px;
+}
+.confirm-card {
+  width: 100%; max-width: 340px;
+  background: var(--night-card);
+  border: 1px solid rgba(217,169,78,0.22);
+  border-radius: 16px; padding: 18px 20px; margin-bottom: 18px;
+}
+.confirm-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 9px 0; border-bottom: 1px solid rgba(217,169,78,0.08);
+}
+.confirm-row:last-child { border-bottom: none; }
+.confirm-label { color: var(--night-muted); font-size: 13px; }
+.confirm-val { color: var(--night-ivory); font-size: 14px; font-weight: 600; text-align: right; }
+.confirm-hint {
+  color: var(--night-muted); font-size: 12.5px; line-height: 1.5;
+  margin: 0 0 22px; max-width: 320px;
+}
+
+/* ════════════ SHARE: кнопка «Поделиться картой» ════════════ */
+.share-btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  margin: 0 16px 14px; padding: 12px 16px;
+  background: var(--night-gold-dim);
+  border: 1px solid rgba(217,169,78,0.4);
+  border-radius: 12px; color: var(--night-gold-bright);
+  font-size: 14px; font-weight: 600; cursor: pointer;
+  transition: all 0.2s ease;
+}
+.share-btn:active { transform: scale(0.97); border-color: rgba(217,169,78,0.65); }
+
+/* ════════════ РЕФЕРАЛКА ════════════ */
+.referral-block {
+  margin: 20px 16px 24px;
+  padding: 20px;
+  background: linear-gradient(135deg, rgba(217,169,78,0.08), rgba(217,169,78,0.03));
+  border: 1px solid rgba(217,169,78,0.25);
+  border-radius: 14px;
+  text-align: center;
+}
+.referral-title {
+  font-family: 'Manrope', sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--night-gold);
+  margin-bottom: 8px;
+}
+.referral-desc {
+  font-size: 12.5px;
+  color: var(--night-muted);
+  line-height: 1.5;
+  margin-bottom: 14px;
+}

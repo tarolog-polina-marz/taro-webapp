@@ -362,13 +362,13 @@ const App = (() => {
     }
     const b = res.booking;
     tg?.HapticFeedback?.notificationOccurred('success');
+    state.lastBooking = b;
     // Переход к оплате через deep link
     if (b.deep_link) {
       if (tg?.openTelegramLink) tg.openTelegramLink(b.deep_link);
       else window.open(b.deep_link, '_blank');
-    } else {
-      TaroUI.toast(`Запись создана! ${b.service_name} — ${b.stars} ⭐`, { kind: 'success' });
     }
+    go('booking_confirm', { push: false });
   }
 
   function openPolina() {
@@ -393,15 +393,58 @@ const App = (() => {
   }
 
   async function payShopItem(slug) {
-    // Пока оплата через Stars для товаров не реализована — переброс на Полину
-    TaroUI.toast('Оплата товаров скоро! А пока — напиши Полине 🙏');
-    setTimeout(() => openPolina(), 1200);
+    state.loading = true; render();
+    const res = await Api.call('pay_shop_item', { slug });
+    state.loading = false;
+    if (!res.ok) {
+      TaroUI.toast(res.error || 'Оплата пока настраивается 🙏', { kind: 'error' });
+      render();
+      return;
+    }
+    const link = res.deep_link;
+    if (tg?.openTelegramLink) tg.openTelegramLink(link);
+    else window.open(link, '_blank');
+  }
+
+  async function shareReferral() {
+    try {
+      const res = await Api.call('referral_info');
+      if (res.ok && res.share_link) {
+        const shareText = `Получи 7 дней таро бесплатно ✦ ${res.share_link}`;
+        const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(res.share_link)}&text=${encodeURIComponent(shareText)}`;
+        if (tg?.openTelegramLink) tg.openTelegramLink(shareUrl);
+        else window.open(shareUrl, '_blank');
+      } else {
+        TaroUI.toast('Ссылка скоро будет готова 🙏');
+      }
+    } catch (e) {
+      TaroUI.toast('Не получилось — попробуй позже');
+    }
   }
 
   function openChannel() {
     const url = 'https://t.me/tarolog_polina_marz_channel';
     if (tg?.openTelegramLink) tg.openTelegramLink(url);
     else window.open(url, '_blank');
+  }
+
+  function shareCard() {
+    const card = state.card;
+    if (!card) return;
+    const cardName = card.card_name || 'карта дня';
+    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent('https://t.me/TarotProto_bot')}&text=${encodeURIComponent('Моя карта дня — ' + cardName + ' ✦')}`;
+    if (navigator.share) {
+      navigator.share({
+        title: 'Карта дня ТАРО',
+        text: `Моя карта дня — ${cardName} ✦`,
+        url: 'https://t.me/TarotProto_bot',
+      }).catch(() => {});
+    } else if (tg?.openTelegramLink) {
+      tg.openTelegramLink(shareUrl);
+    } else {
+      window.open(shareUrl, '_blank');
+    }
+    tg?.HapticFeedback?.selectionChanged();
   }
 
   // ── Инициализация ──
@@ -420,7 +463,7 @@ const App = (() => {
         go('home', { push: false });
       } else if (state.profile) {
         setLoading(false);
-        startOnboarding();
+        go('welcome', { push: false });
       } else {
         setLoading(false);
         go('home', { push: false }); // покажет ошибку соединения
@@ -437,7 +480,7 @@ const App = (() => {
     setAskSphere, askCard, payPlan, openChannel,
     startOnboarding, loadQuestionnaire, setHistTab, saveCardTime,
     loadShopItems, loadReadingServices, loadBookingSlots, bookSlot, openPolina,
-    payShopItem,
+    payShopItem, shareCard,
   };
 })();
 
@@ -448,7 +491,7 @@ const Api = (() => {
 
   // Действия, которые НЕ безопасно повторять при сбое
   // (могут списать лимит или создать платёж дважды)
-  const NO_RETRY = new Set(['ask_card', 'start_payment']);
+  const NO_RETRY = new Set(['ask_card', 'start_payment', 'pay_shop_item']);
   const FETCH_TIMEOUT_MS = 30000; // без таймаута fetch висит вечно → «зависание»
 
   async function call(action, payload = {}, { retries = 1 } = {}) {
@@ -499,6 +542,18 @@ const Api = (() => {
 
 // ── Экраны ──
 const Screens = {
+
+  // ═══ ПРИВЕТСТВЕННЫЙ ЭКРАН ═══
+  welcome(s) {
+    const body = `
+      <div class="welcome">
+        <div class="welcome-icon">✦</div>
+        <h1 class="welcome-title">Добро пожаловать</h1>
+        <p class="welcome-text">Я — Полина. Карты помогут услышать себя. Ответь на 3 вопроса — и карты заговорят с тобой лично.</p>
+        <button class="tui-btn tui-btn-primary tui-btn-full tui-btn-glow" onclick="App.startOnboarding()">Начать ✦</button>
+      </div>`;
+    return TaroUI.screenHeader('Добро пожаловать', { back: false }) + body;
+  },
 
   // ═══ ГЛАВНЫЙ: Карта дня ═══
   home(s) {
@@ -574,7 +629,7 @@ const Screens = {
     const polinaStep = `<div class="next-step polina-step" onclick="App.go('booking')">
       <div class="next-step-icon">✦</div>
       <div class="next-step-text">
-        <div class="next-step-title">Личный расклад у Полины</div>
+        <div class="next-step-title">Личный расклад у Полины · от $10</div>
         <div class="next-step-sub">Живой разбор твоей ситуации — запись через календарь</div>
       </div>
       <div class="next-step-arrow">›</div>
@@ -599,6 +654,7 @@ const Screens = {
         <div class="interp-title">Что говорят карты</div>
         <p class="interp-text">${_paragraphs(c.interpretation || '')}</p>
       </div>
+      <button class="share-btn" onclick="App.shareCard()">Поделиться картой 📤</button>
       ${reviewBlock}
       ${nextStep}
       ${polinaStep}
@@ -710,8 +766,7 @@ const Screens = {
 
   // ═══ ВОПРОС К КАРТАМ (ИИ) ═══
   ask(s) {
-    const tabs = TaroUI.tabBar(TABS, 'ask');
-    if (s.loading) return TaroUI.spinner() + tabs;
+    if (s.loading) return TaroUI.spinner();
 
     const chips = (s.spheres || []).map(sp =>
       `<span class="chip ${(s.askSphere || s.profile?.priority_sphere) === sp.code ? 'chip-active' : ''}"
@@ -760,13 +815,12 @@ const Screens = {
       <div class="ask-chips">${chips}</div>
       ${formBlock}
       ${results}`;
-    return TaroUI.screenHeader('Вопрос к картам') + body + tabs;
+    return TaroUI.screenHeader('Вопрос к картам', { back: true }) + body;
   },
 
   // ═══ ТАРИФЫ + ОТЗЫВЫ ═══
   plans(s) {
-    const tabs = TaroUI.tabBar(TABS, 'plans');
-    if (s.loading) return TaroUI.spinner() + tabs;
+    if (s.loading) return TaroUI.spinner();
 
     const currentTier = s.profile?.tier || 'free';
     const FEATURE_TEXT = {
@@ -823,7 +877,7 @@ const Screens = {
           <div class="tst-title">Отзывы</div>
           <div class="tui-hint"><span class="linklike" onclick="App.openChannel()">Отзывы о раскладах — в канале Полины ›</span></div>
         </div>`}`;
-    return TaroUI.screenHeader('Тарифы') + body + tabs;
+    return TaroUI.screenHeader('Тарифы', { back: true }) + body;
   },
 
   // ═══ ПРОФИЛЬ ═══
@@ -869,17 +923,26 @@ const Screens = {
       ${TaroUI.section(rows, { header: 'Твои данные' })}
       ${timeBlock}
       ${TaroUI.section(
+        TaroUI.row('Тарифы и подписки', p.tier === 'free' ? 'от $5' : 'изменить', { arrow: true, onClick: `App.go('plans')` }),
+        { header: 'Подписка' }
+      )}
+      ${TaroUI.section(
         TaroUI.row('Полная анкета', 'изменить ответы', { arrow: true, onClick: `App.go('questionnaire')` }) +
         TaroUI.row('Канал Полины', 'открыть', { arrow: true, onClick: 'App.openChannel()' }),
         { header: 'Ещё' }
-      )}`;
+      )}
+      <div class="referral-block" id="referral-block">
+        <div class="referral-title">🎁 Подари подруге 7 дней таро</div>
+        <div class="referral-desc">Поделись ссылкой — подруга получит 7 дней бесплатно, а ты — месяц $10 после её первой оплаты.</div>
+        <button class="tui-btn tui-btn-glow tui-btn-full" id="referral-btn" onclick="App.shareReferral()">Поделиться ссылкой ✦</button>
+      </div>`;
+
     return TaroUI.screenHeader('Профиль') + body + tabs;
   },
 
   // ═══ АНКЕТА (список всех вопросов) ═══
   questionnaire(s) {
-    const tabs = TaroUI.tabBar(TABS, 'questionnaire');
-    if (s.loading) return TaroUI.spinner() + tabs;
+    if (s.loading) return TaroUI.spinner();
 
     const questions = s.questions || [];
     const answered = questions.filter(q => s.answers[q.id]).length;
@@ -898,7 +961,7 @@ const Screens = {
       TaroUI.section(rows, {
         header: `Ответов: ${answered} из ${questions.length}`,
         footer: 'Обязательные помечены •. Ответы можно менять в любой момент.',
-      }) + tabs;
+      });
   },
 
   // ═══ МАГАЗИН ═══
@@ -939,8 +1002,8 @@ const Screens = {
       <div class="polina-cta" onclick="App.go('booking')">
         <div class="polina-cta-icon">✧</div>
         <div class="polina-cta-text">
-          <div class="polina-cta-title">Личный расклад у Полины</div>
-          <div class="polina-cta-sub">Запишись на живой расклад — Полина разберёт твою ситуацию</div>
+          <div class="polina-cta-title">Записаться на расклад · от $10</div>
+          <div class="polina-cta-sub">Живой разбор твоей ситуации — Полина разберёт твою ситуацию</div>
         </div>
         <div class="polina-cta-arrow">›</div>
       </div>`;
@@ -1026,10 +1089,32 @@ const Screens = {
         }
       </div>
       <div class="tui-hint" style="margin-top:16px">
-        Нужна срочная консультация? <span class="linklike" onclick="App.openPolina()">Напиши Полине напрямую ›</span>
+        Нужна срочная консультация? +50% — <span class="linklike" onclick="App.openPolina()">Напиши Полине напрямую ›</span>
       </div>`;
 
     return TaroUI.screenHeader('Запись к Полине', { back: true }) + body;
+  },
+
+  // ═══ ПОДТВЕРЖДЕНИЕ ЗАПИСИ ═══
+  booking_confirm(s) {
+    const b = s.lastBooking || {};
+    const slotDate = b.slot_date ? _fmtDateLong(b.slot_date) : '';
+    const slotTime = b.slot_time ? String(b.slot_time).slice(0, 5) : '';
+    const body = `
+      <div class="confirm-screen">
+        <div class="confirm-icon">✓</div>
+        <h2 class="confirm-title">Запись создана</h2>
+        <div class="confirm-card">
+          <div class="confirm-row"><span class="confirm-label">Услуга</span><span class="confirm-val">${TaroUI.esc(b.service_name || 'Личный расклад')}</span></div>
+          <div class="confirm-row"><span class="confirm-label">Дата</span><span class="confirm-val">${TaroUI.esc(slotDate)}</span></div>
+          <div class="confirm-row"><span class="confirm-label">Время</span><span class="confirm-val">${TaroUI.esc(slotTime)} МСК</span></div>
+          <div class="confirm-row"><span class="confirm-label">Готовность</span><span class="confirm-val">~3 дня после оплаты</span></div>
+          ${b.stars ? `<div class="confirm-row"><span class="confirm-label">К оплате</span><span class="confirm-val">${b.stars} ⭐</span></div>` : ''}
+        </div>
+        <p class="confirm-hint">Полина свяжется с тобой для подтверждения. Оплата — через Telegram Stars.</p>
+        <button class="tui-btn tui-btn-primary tui-btn-full tui-btn-glow" onclick="App.go('home', { push: false })">Готово ✦</button>
+      </div>`;
+    return TaroUI.screenHeader('Готово', { back: false }) + body;
   },
 
   _displayValue(q, val) {
@@ -1121,11 +1206,9 @@ function _paragraphs(text) {
 
 // Табы: карта дня — всегда первый и главный
 const TABS = [
-  { id: 'home', icon: '✦', label: 'Карта дня' },
+  { id: 'home', icon: '✦', label: 'Карта' },
   { id: 'history', icon: '☽', label: 'История' },
-  { id: 'ask', icon: '✧', label: 'Спросить' },
   { id: 'shop', icon: '❖', label: 'Магазин' },
-  { id: 'plans', icon: '★', label: 'Тарифы' },
   { id: 'profile', icon: '☉', label: 'Профиль' },
 ];
 
