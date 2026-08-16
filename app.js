@@ -106,6 +106,21 @@ const App = (() => {
 
   function setLoading(v) { state.loading = v; render(); }
 
+  // ── Экран для браузера: приложение открывается только внутри Telegram ──
+  // Стили инлайн, чтобы не зависеть от порядка загрузки CSS/экранов.
+  function renderBrowserGate() {
+    const el = root();
+    if (!el) return;
+    el.innerHTML = `
+      <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:32px 24px;background:radial-gradient(1200px 600px at 50% -10%, rgba(217,169,78,.12), transparent), #0d0c14;color:#f1ede3;font-family:'Manrope',system-ui,sans-serif;">
+        <div style="font-size:56px;line-height:1;margin-bottom:18px;">✦</div>
+        <h1 style="font-family:'Cormorant Garamond',serif;font-weight:600;font-size:30px;margin:0 0 12px;color:#ecc46f;">ТАРО — Полина Марз</h1>
+        <p style="margin:0 0 8px;font-size:16px;line-height:1.55;">Приложение открывается только внутри Telegram.</p>
+        <p style="margin:0 0 28px;font-size:14px;color:#b7b1c8;line-height:1.55;">Эта ссылка устарела или открыта в браузере.<br>Нажми кнопку ниже — бот запустит приложение заново.</p>
+        <a href="https://t.me/TarotProto_bot" style="display:inline-block;padding:14px 32px;border-radius:14px;background:#d9a94e;color:#171106;font-weight:700;text-decoration:none;font-size:16px;box-shadow:0 6px 24px rgba(217,169,78,.35);">Открыть в Telegram ✦</a>
+      </div>`;
+  }
+
   // ── Таймер до сброса карты дня (полночь МСК) ──
   // Сервер отдаёт msk_now + next_reset_utc: не зависим от часов устройства.
   let _timerIv = null;
@@ -473,14 +488,11 @@ const App = (() => {
     if (tg?.setHeaderColor) tg.setHeaderColor('#0d0c14');
     if (tg?.setBackgroundColor) tg.setBackgroundColor('#0d0c14');
 
-    // ── Admin mode: #admin in URL → admin login/dashboard ──
-    if (window.location.hash === '#admin' || window.location.hash === '#admin/') {
-      if (state.adminToken) {
-        go('admin_dashboard', { push: false });
-        adminLoadTab('dashboard');
-      } else {
-        go('admin_login', { push: false });
-      }
+    // ── Гейт: приложение работает ТОЛЬКО внутри Telegram (Mini App) ──
+    // Вне Telegram (браузер, старые ссылки из старых кнопок) — фирменный
+    // экран с переходом в бота. Никакой функциональности снаружи.
+    if (!tg?.initData) {
+      renderBrowserGate();
       return;
     }
 
