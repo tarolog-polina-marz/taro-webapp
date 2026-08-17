@@ -227,6 +227,14 @@ body::before {
   border-color: rgba(217, 169, 78, 0.45);
   box-shadow: 0 0 0 3px rgba(217, 169, 78, 0.12);
 }
+/* a11y (better-accessibility #2): видимое кольцо фокуса для клавиатуры.
+   Базовый outline:none в taro-ui.css переопределяется явным outline. */
+.tui-input:focus-visible {
+  border-color: rgba(217, 169, 78, 0.6);
+  box-shadow: 0 0 0 3px rgba(217, 169, 78, 0.22);
+  outline: 2px solid rgba(217, 169, 78, 0.7);
+  outline-offset: 2px;
+}
 
 /* ── Бейджи ── */
 .tui-badge {

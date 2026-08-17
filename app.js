@@ -1571,8 +1571,8 @@ const Screens = {
     else if (s.adminTab === 'broadcasts') content = Screens._adminBroadcasts(s);
     else if (s.adminTab === 'settings') content = Screens._adminSettings(s);
 
-    // Toast container
-    const toastsHtml = `<div class="adm-toasts">
+    // Toast container (a11y #11: live-region для скринридеров)
+    const toastsHtml = `<div class="adm-toasts" role="status" aria-live="polite">
       ${s.adminToasts.map(t => `<div class="adm-toast adm-toast-${t.kind}">
         <span class="adm-toast-icon">${t.kind === 'success' ? '✓' : t.kind === 'error' ? '✕' : 'ⓘ'}</span>
         <span class="adm-toast-msg">${TaroUI.esc(t.msg)}</span>
