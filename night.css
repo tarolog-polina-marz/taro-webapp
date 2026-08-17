@@ -290,7 +290,7 @@ body::before {
 .seg-btn {
   flex: 1; text-align: center; padding: 8px 0; border-radius: 9px;
   font-size: 13px; color: var(--night-muted); cursor: pointer;
-  transition: all 0.22s ease;
+  transition: color 0.22s ease, background 0.22s ease, border-color 0.22s ease;
 }
 .seg-active {
   background: var(--night-gold-dim); color: var(--night-gold-bright);
@@ -455,7 +455,7 @@ body::before {
 .review-btn {
   flex: 1; max-width: 150px; padding: 11px 0; border-radius: 12px; font-size: 14px; font-weight: 600;
   border: 1px solid var(--night-line); background: var(--night-bg2); color: var(--night-muted);
-  transition: all 0.15s;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 .review-btn.yes { background: var(--night-gold-dim); color: var(--night-gold-bright); border-color: rgba(217, 169, 78, 0.35); }
 .review-btn:active { transform: scale(0.97); }
@@ -487,7 +487,7 @@ body::before {
 .wizard-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 26px; }
 .wizard-back { color: var(--night-gold); font-size: 30px; line-height: 1; padding: 4px 12px; cursor: pointer; }
 .wizard-dots { display: flex; gap: 7px; }
-.dot { width: 7px; height: 7px; border-radius: 50%; background: rgba(217, 169, 78, 0.18); transition: all 0.25s; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: rgba(217, 169, 78, 0.18); transition: background 0.25s, width 0.25s, border-radius 0.25s, box-shadow 0.25s; }
 .dot.done { background: rgba(217, 169, 78, 0.45); }
 .dot.active { background: var(--night-gold); box-shadow: 0 0 10px rgba(217, 169, 78, 0.6); width: 20px; border-radius: 4px; }
 .wizard-icon { text-align: center; font-size: 34px; color: var(--night-gold-bright); text-shadow: 0 0 24px rgba(236, 196, 111, 0.6); margin-bottom: 14px; animation: night-star-pulse 2.6s ease-in-out infinite; }
@@ -696,7 +696,7 @@ body::before {
 .slot-btn {
   padding: 10px 16px; border-radius: 999px; font-size: 14px; font-weight: 600;
   background: var(--night-card); border: 1px solid rgba(217,169,78,0.3); color: var(--night-ivory);
-  cursor: pointer; transition: all 0.25s;
+  cursor: pointer; transition: background 0.25s, color 0.25s, border-color 0.25s, transform 0.25s;
 }
 .slot-btn:active { background: rgba(217,169,78,0.18); transform: scale(0.96); }
 .slot-annual { border-color: rgba(217,169,78,0.5); color: var(--night-gold-bright); }
@@ -766,7 +766,7 @@ body::before {
   border: 1px solid rgba(217,169,78,0.4);
   border-radius: 12px; color: var(--night-gold-bright);
   font-size: 14px; font-weight: 600; cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
 }
 .share-btn:active { transform: scale(0.97); border-color: rgba(217,169,78,0.65); }
 
@@ -833,7 +833,7 @@ body::before {
 .admin-logout {
   color: var(--night-muted); font-size: 13px; cursor: pointer;
   padding: 6px 14px; border: 1px solid var(--night-line); border-radius: 999px;
-  transition: all 0.2s;
+  transition: color 0.2s, background 0.2s, border-color 0.2s;
 }
 .admin-logout:active { background: rgba(229,114,106,0.12); border-color: rgba(229,114,106,0.3); color: #e5726a; }
 
@@ -1063,7 +1063,7 @@ body::before {
   display: flex; align-items: center; gap: 12px;
   padding: 12px 14px; margin-bottom: 2px;
   border-radius: 10px; cursor: pointer;
-  color: var(--night-muted); transition: all 0.2s;
+  color: var(--night-muted); transition: color 0.2s, background 0.2s;
 }
 .adm-nav-item:hover { background: rgba(217,169,78,0.06); color: var(--night-ivory); }
 .adm-nav-active {
@@ -1138,7 +1138,7 @@ body::before {
 .adm-topbar-logout {
   font-size: 12px; color: #e5726a; background: none;
   border: 1px solid rgba(229,114,106,0.25); border-radius: 999px;
-  padding: 5px 12px; cursor: pointer; transition: all 0.2s;
+  padding: 5px 12px; cursor: pointer; transition: color 0.2s, background 0.2s, border-color 0.2s;
 }
 .adm-topbar-logout:hover { background: rgba(229,114,106,0.1); }
 
@@ -1269,7 +1269,7 @@ body::before {
   padding: 6px 14px; border-radius: 999px; font-size: 12px;
   background: var(--night-bg2); color: var(--night-muted);
   border: 1px solid var(--night-line); cursor: pointer;
-  transition: all 0.2s;
+  transition: color 0.2s, background 0.2s, border-color 0.2s;
 }
 .adm-filter-btn:hover { color: var(--night-ivory); }
 .adm-filter-active {
@@ -1419,5 +1419,14 @@ body::before {
   }
   .adm-search-input {
     min-width: 100px;
+  }
+}
+
+/* ════════════ Better Skills: prefers-reduced-motion ════════════ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
