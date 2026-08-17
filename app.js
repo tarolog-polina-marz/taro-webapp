@@ -16,6 +16,9 @@
 // ── Telegram WebApp init ──
 const tg = window.Telegram?.WebApp;
 
+// Категории блога (зеркалят BLOG_CATEGORIES в Edge Function).
+const BLOG_CATEGORIES = ['Карты и значения', 'Практика', 'Истории', 'О таро'];
+
 const App = (() => {
   const state = {
     screen: 'home',
@@ -33,6 +36,7 @@ const App = (() => {
     plans: [],
     shopItems: [],
     shopItemsLoaded: false,
+    deliveryForm: null,    // {slug, name, stars, method, pvz, full_name, postal_code, address}
     readingServices: [],
     bookingSlots: [],
     loading: false,
@@ -51,6 +55,8 @@ const App = (() => {
     adminPosts: [],
     adminSlots: [],
     adminProducts: [],
+    adminOrders: [],
+    adminOrdersLoaded: false,
     adminBroadcasts: [],
     adminEditing: null,    // currently editing item
     adminDashboard: null,  // metrics + events + chart
@@ -411,18 +417,71 @@ const App = (() => {
     else window.open(link, '_blank');
   }
 
-  async function payShopItem(slug) {
+  async function payShopItem(slug, delivery) {
     state.loading = true; render();
-    const res = await Api.call('pay_shop_item', { slug });
+    const res = await Api.call('pay_shop_item', { slug, delivery });
     state.loading = false;
     if (!res.ok) {
       TaroUI.toast(res.error || 'Оплата пока настраивается 🙏', { kind: 'error' });
       render();
-      return;
+      return false;
     }
     const link = res.deep_link;
     if (tg?.openTelegramLink) tg.openTelegramLink(link);
     else window.open(link, '_blank');
+    return true;
+  }
+
+  // ── Доставка: адрес собирается ПЕРЕД оплатой (Ozon ПВЗ / Белпочта) ──
+  function openShopDelivery(slug) {
+    const item = (state.shopItems || []).find(i => i.slug === slug);
+    if (!item) return;
+    if (!item.requires_delivery) {
+      // Цифровые товары и услуги: доставка не нужна — сразу к оплате.
+      payShopItem(slug, null);
+      return;
+    }
+    state.deliveryForm = {
+      slug, name: item.name_ru, method: 'ozon_pvz',
+      pvz: '', full_name: '', postal_code: '', address: '',
+    };
+    go('shop_delivery');
+  }
+
+  function shopDeliveryField(id, value) {
+    if (!state.deliveryForm) return;
+    state.deliveryForm[id] = (value || '').trimStart();
+    // Без render(): полная перерисовка сбросила бы фокус и курсор инпута.
+  }
+
+  function shopDeliveryMethod(method) {
+    if (!state.deliveryForm) return;
+    state.deliveryForm.method = method;
+    render();
+  }
+
+  async function submitShopDelivery() {
+    const f = state.deliveryForm;
+    if (!f) return;
+    // Клиентская валидация (сервер повторит — но тёплые ошибки ближе к юзеру).
+    if (f.method === 'ozon_pvz') {
+      if (!f.pvz.trim()) {
+        TaroUI.toast('Укажи название или адрес пункта выдачи Ozon 🙏', { kind: 'error' });
+        return;
+      }
+    } else if (f.method === 'belpochta') {
+      if (!f.full_name.trim()) { TaroUI.toast('Укажи ФИО получателя 🙏', { kind: 'error' }); return; }
+      if (!f.postal_code.trim()) { TaroUI.toast('Укажи почтовый индекс 🙏', { kind: 'error' }); return; }
+      if (!f.address.trim()) { TaroUI.toast('Укажи адрес доставки 🙏', { kind: 'error' }); return; }
+    }
+    const delivery = f.method === 'ozon_pvz'
+      ? { method: 'ozon_pvz', pvz: f.pvz.trim() }
+      : { method: 'belpochta', full_name: f.full_name.trim(), postal_code: f.postal_code.trim(), address: f.address.trim() };
+    const ok = await payShopItem(f.slug, delivery);
+    if (!ok) return; // Ошибка оплаты: остаёмся на форме, адрес не теряем.
+    // Платёж открылся (юзер ушёл в Telegram) — возвращаем в магазин без формы.
+    state.deliveryForm = null;
+    go('shop', { push: false });
   }
 
   async function shareReferral() {
@@ -649,6 +708,17 @@ const App = (() => {
     adminLoadUsers(next);
   }
 
+  async function adminReloadOrders() {
+    const res = await adminCall('admin_orders', { sub: 'list' });
+    if (res.ok) {
+      state.adminOrders = res.orders || [];
+      state.adminOrdersLoaded = true;
+    } else {
+      adminToast(res.error || 'Ошибка загрузки', 'error');
+    }
+    render();
+  }
+
   async function adminLoadTab(tab) {
     state.adminTab = tab;
     state.adminSidebarOpen = false;
@@ -666,6 +736,14 @@ const App = (() => {
     } else if (tab === 'products' && !state.adminProducts.length) {
       const res = await adminCall('admin_products', { sub: 'list' });
       if (res.ok) state.adminProducts = res.products || [];
+    } else if (tab === 'orders' && !state.adminOrdersLoaded) {
+      const res = await adminCall('admin_orders', { sub: 'list' });
+      if (res.ok) {
+        state.adminOrders = res.orders || [];
+        state.adminOrdersLoaded = true;
+      } else {
+        adminToast(res.error || 'Ошибка загрузки', 'error');
+      }
     } else if (tab === 'broadcasts' && !state.adminBroadcasts.length) {
       const res = await adminCall('admin_broadcasts', { sub: 'list' });
       if (res.ok) state.adminBroadcasts = res.broadcasts || [];
@@ -797,6 +875,7 @@ const App = (() => {
     startOnboarding, loadQuestionnaire, setHistTab, saveCardTime,
     loadShopItems, loadReadingServices, loadBookingSlots, bookSlot, openPolina,
     payShopItem, shareCard,
+    openShopDelivery, shopDeliveryField, shopDeliveryMethod, submitShopDelivery,
     // Admin
     adminLogin, adminLogout, adminLoadTab, adminSavePost, adminDeletePost,
     adminDeleteSlot, adminSaveSlot, adminSaveProduct, adminToggleProduct,
@@ -805,7 +884,7 @@ const App = (() => {
     // Admin v2
     adminToast, adminToggleSidebar, adminLoadDashboard, adminLoadUsers,
     adminSearchUsers, adminFilterTier, adminLoadUserDetail, adminCloseUserDetail,
-    adminUsersPage,
+    adminUsersPage, adminReloadOrders,
   };
 })();
 
@@ -1311,14 +1390,14 @@ const Screens = {
 
     const itemCard = (item) => {
       const price = `$${(item.price_cents / 100).toFixed(0)}`;
-      const delivery = item.requires_delivery ? ' · доставка ПВЗ Ozon' : '';
+      const delivery = item.requires_delivery ? ' · доставка: ПВЗ Ozon / Белпочта' : '';
       return `
         <div class="shop-item">
           <div class="shop-item-type">${typeIcon[item.product_type] || '✦'} ${typeLabel[item.product_type] || ''}</div>
           <div class="shop-item-name">${TaroUI.esc(item.name_ru)}</div>
           <div class="shop-item-price">${price}</div>
           <div class="shop-item-desc">${TaroUI.esc(item.description)}</div>
-          <button class="tui-btn tui-btn-primary tui-btn-full" onclick="App.payShopItem('${item.slug}')">${price} — купить</button>
+          <button class="tui-btn tui-btn-primary tui-btn-full" onclick="App.openShopDelivery('${item.slug}')">${price} — купить</button>
           ${delivery ? `<div class="tui-hint">${delivery}</div>` : ''}
         </div>`;
     };
@@ -1357,6 +1436,61 @@ const Screens = {
       </div>`;
 
     return TaroUI.screenHeader('Магазин') + body + tabs;
+  },
+
+  // ═══ ДОСТАВКА: адрес перед оплатой (Ozon ПВЗ / Белпочта) ═══
+  shop_delivery(s) {
+    const f = s.deliveryForm;
+    if (!f) {
+      // Нет формы (прямой переход/кнопка «назад» после отправки) — в магазин.
+      setTimeout(() => App.go('shop', { push: false }), 0);
+      return '';
+    }
+
+    const methodBtns = `
+      <div class="seg-row" role="tablist" aria-label="Способ доставки">
+        <div class="seg-btn ${f.method === 'ozon_pvz' ? 'seg-active' : ''}" role="tab" aria-selected="${f.method === 'ozon_pvz'}" onclick="App.shopDeliveryMethod('ozon_pvz')">ПВЗ Ozon</div>
+        <div class="seg-btn ${f.method === 'belpochta' ? 'seg-active' : ''}" role="tab" aria-selected="${f.method === 'belpochta'}" onclick="App.shopDeliveryMethod('belpochta')">Белпочта</div>
+      </div>`;
+
+    let fields = '';
+    if (f.method === 'ozon_pvz') {
+      fields = `
+        <label class="tui-label" for="dl_pvz">Название или адрес пункта выдачи Ozon</label>
+        <input class="tui-input" id="dl_pvz" type="text" autocomplete="off"
+          placeholder="Например: ТЦ «Галерея», ул. Ленина, 12"
+          value="${TaroUI.esc(f.pvz)}"
+          oninput="App.shopDeliveryField('pvz', this.value)">
+        <div class="tui-hint">Выбери удобный ПВЗ Ozon в приложении Ozon и впиши его сюда.</div>`;
+    } else {
+      fields = `
+        <label class="tui-label" for="dl_full_name">ФИО получателя</label>
+        <input class="tui-input" id="dl_full_name" type="text" autocomplete="name"
+          placeholder="Иванова Мария Петровна"
+          value="${TaroUI.esc(f.full_name)}"
+          oninput="App.shopDeliveryField('full_name', this.value)">
+        <label class="tui-label" for="dl_postal_code">Почтовый индекс</label>
+        <input class="tui-input" id="dl_postal_code" type="text" inputmode="numeric"
+          placeholder="220040"
+          value="${TaroUI.esc(f.postal_code)}"
+          oninput="App.shopDeliveryField('postal_code', this.value)">
+        <label class="tui-label" for="dl_address">Адрес</label>
+        <input class="tui-input" id="dl_address" type="text" autocomplete="street-address"
+          placeholder="г. Минск, ул. Независимости, д. 10, кв. 5"
+          value="${TaroUI.esc(f.address)}"
+          oninput="App.shopDeliveryField('address', this.value)">
+        <div class="tui-hint">Доставка Белпочтой по Республике Беларусь.</div>`;
+    }
+
+    const body = `
+      <div class="delivery-card">
+        <div class="delivery-item">🃏 ${TaroUI.esc(f.name)}</div>
+        ${methodBtns}
+        ${fields}
+        <button class="tui-btn tui-btn-primary tui-btn-full tui-btn-glow" onclick="App.submitShopDelivery()">К оплате ✦</button>
+      </div>`;
+
+    return TaroUI.screenHeader('Доставка', { back: true }) + body;
   },
 
   // ═══ ЗАПИСЬ К ПОЛИНЕ ═══
@@ -1522,6 +1656,7 @@ const Screens = {
       { id: 'posts', icon: '✦', label: 'Блог' },
       { id: 'slots', icon: '☽', label: 'Слоты' },
       { id: 'products', icon: '❖', label: 'Товары' },
+      { id: 'orders', icon: '▤', label: 'Заказы' },
       { id: 'broadcasts', icon: '✧', label: 'Рассылки' },
       { id: 'settings', icon: '☉', label: 'Настройки' },
     ];
@@ -1568,6 +1703,7 @@ const Screens = {
     else if (s.adminTab === 'posts') content = Screens._adminPosts(s);
     else if (s.adminTab === 'slots') content = Screens._adminSlots(s);
     else if (s.adminTab === 'products') content = Screens._adminProducts(s);
+    else if (s.adminTab === 'orders') content = Screens._adminOrders(s);
     else if (s.adminTab === 'broadcasts') content = Screens._adminBroadcasts(s);
     else if (s.adminTab === 'settings') content = Screens._adminSettings(s);
 
@@ -1723,6 +1859,9 @@ const Screens = {
     const p = d.profile || {};
 
     const tierLabel = { free: 'Free', basic: 'Basic', standard: 'Standard', premium: 'Premium' };
+    // tierColors дублируется из _adminUsers: модалка рендерится тем же экраном,
+    // но переменная из другой функции недоступна (ReferenceError → пустая модалка, баг 17.08).
+    const tierColors = { free: 'adm-badge-dim', basic: 'adm-badge-gold', standard: 'adm-badge-gold', premium: 'admin-badge-green' };
     const sphereLabels = { love: 'Любовь', finance: 'Финансы', health: 'Здоровье', family: 'Семья', purpose: 'Предназначение' };
 
     const cardsHtml = (d.cards || []).map(c => `
@@ -1817,7 +1956,7 @@ const Screens = {
           <div class="admin-item-emoji">${TaroUI.esc(p.cover_emoji || '✦')}</div>
           <div class="admin-item-main">
             <div class="admin-item-title">${TaroUI.esc(p.title)}</div>
-            <div class="admin-item-meta">${statusBadge(p.status)} · ${p.scheduled_at ? _fmtDate(p.scheduled_at.slice(0,10)) + ' ' + String(p.scheduled_at).slice(11,16) : p.published_at ? _fmtDate(p.published_at.slice(0,10)) : '—'}</div>
+            <div class="admin-item-meta">${statusBadge(p.status)} · ${TaroUI.esc(p.category || 'О таро')} · ${p.scheduled_at ? _fmtDate(p.scheduled_at.slice(0,10)) + ' ' + String(p.scheduled_at).slice(11,16) : p.published_at ? _fmtDate(p.published_at.slice(0,10)) : '—'}</div>
           </div>
           <div class="admin-item-chevron">›</div>
         </div>
@@ -1857,6 +1996,13 @@ const Screens = {
           <input class="tui-input" id="post_emoji" type="text" value="${TaroUI.esc(p.cover_emoji || '✦')}" maxlength="2">
         </div>
         <div class="admin-form-field">
+          <label class="admin-label">Категория</label>
+          <select class="tui-input" id="post_category">
+            ${BLOG_CATEGORIES.map(c =>
+              `<option value="${TaroUI.esc(c)}" ${(p.category || 'О таро') === c ? 'selected' : ''}>${TaroUI.esc(c)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="admin-form-field">
           <label class="admin-label">Краткое описание</label>
           <textarea class="tui-input" id="post_excerpt" rows="2" placeholder="Анонс">${TaroUI.esc(p.excerpt || '')}</textarea>
         </div>
@@ -1882,6 +2028,7 @@ const Screens = {
             title: document.getElementById('post_title').value,
             slug: document.getElementById('post_slug').value,
             cover_emoji: document.getElementById('post_emoji').value,
+            category: document.getElementById('post_category').value,
             excerpt: document.getElementById('post_excerpt').value,
             body: document.getElementById('post_body').value,
             status: document.getElementById('post_status').value,
@@ -2077,6 +2224,52 @@ const Screens = {
           Сохранить ✦
         </button>
       </div>`;
+  },
+
+  // ═══ ADMIN: ЗАКАЗЫ МАГАЗИНА (с адресом доставки) ═══
+  _adminOrders(s) {
+    const orders = s.adminOrders || [];
+    if (!s.adminOrdersLoaded) return TaroUI.spinner();
+
+    const methodLabel = { ozon_pvz: 'ПВЗ Ozon', belpochta: 'Белпочта' };
+    const statusLabel = { new: 'новый', paid: 'оплачен', processing: 'собирается', shipped: 'отправлен', delivered: 'доставлен', cancelled: 'отменён' };
+
+    const deliveryHtml = (o) => {
+      if (!o.delivery_method) {
+        return `<div class="adm-order-delivery adm-order-delivery-none">Без доставки (услуга / цифровой товар)</div>`;
+      }
+      const a = o.delivery_address || {};
+      const lines = o.delivery_method === 'belpochta'
+        ? [a.full_name, a.postal_code ? `Индекс: ${a.postal_code}` : '', a.address].filter(Boolean)
+        : [a.pvz];
+      return `<div class="adm-order-delivery">
+        <div class="adm-order-delivery-method">📦 ${methodLabel[o.delivery_method] || o.delivery_method}</div>
+        ${lines.map(l => `<div class="adm-order-delivery-line">${TaroUI.esc(l)}</div>`).join('')}
+      </div>`;
+    };
+
+    const cards = orders.map(o => {
+      const price = `$${((o.total_cents || 0) / 100).toFixed(2)}`;
+      const items = (o.items || []).map(it => `${it.qty} × ${TaroUI.esc(it.name)}`).join(', ');
+      return `<div class="admin-item adm-order-card">
+        <div class="admin-item-row">
+          <div class="admin-item-emoji">▤</div>
+          <div class="admin-item-main">
+            <div class="admin-item-title">${TaroUI.esc(o.customer)} · ${price}</div>
+            <div class="admin-item-meta">${o.created_at ? _fmtDate(o.created_at.slice(0, 10)) : '—'} · ${items || '—'}</div>
+          </div>
+          <span class="adm-badge adm-badge-gold">${statusLabel[o.status] || o.status}</span>
+        </div>
+        ${deliveryHtml(o)}
+      </div>`;
+    }).join('');
+
+    let html = `<div class="admin-section-header">
+      <span>Заказы магазина · ${orders.length}</span>
+      <button class="tui-btn tui-btn-secondary tui-btn-small" onclick="App.adminReloadOrders()">↻ Обновить</button>
+    </div>`;
+    html += orders.length ? `<div class="admin-list">${cards}</div>` : TaroUI.empty('Заказов пока нет', 'Оплаченные заказы появятся здесь');
+    return html;
   },
 
   // ═══ ADMIN: РАССЫЛКИ ═══

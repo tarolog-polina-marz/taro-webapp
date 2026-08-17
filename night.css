@@ -1430,6 +1430,41 @@ body::before {
   }
 }
 
+/* ════════════ ДОСТАВКА: адрес перед оплатой (Ozon ПВЗ / Белпочта) ════════════ */
+.delivery-card {
+  padding: 18px 16px; margin: 4px 0 24px;
+  background: var(--night-card);
+  border: 1px solid rgba(217,169,78,0.18);
+  border-radius: 14px;
+}
+.delivery-item {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 17px; color: var(--night-ivory); font-weight: 600;
+  margin-bottom: 14px;
+}
+.delivery-card .tui-input { margin-bottom: 4px; }
+.delivery-card .tui-hint { margin: 2px 0 12px; }
+.delivery-card .tui-btn { margin-top: 6px; }
+
+/* Метка поля формы (пользовательская) */
+.tui-label {
+  display: block; font-size: 12px; letter-spacing: 0.4px;
+  color: var(--night-muted); margin: 10px 0 5px; font-weight: 500;
+}
+
+/* ════════════ ADMIN: заказ — блок адреса доставки ════════════ */
+.adm-order-card { cursor: default; }
+.adm-order-delivery {
+  padding: 10px 14px 14px; margin: 0;
+  border-top: 1px solid rgba(217,169,78,0.12);
+}
+.adm-order-delivery-method {
+  font-size: 13px; color: var(--night-gold-bright); font-weight: 600;
+  margin-bottom: 4px;
+}
+.adm-order-delivery-line { font-size: 13px; color: var(--night-ivory); line-height: 1.5; }
+.adm-order-delivery-none { font-size: 12px; color: var(--night-muted); font-style: italic; }
+
 /* ════════════ Better Skills: prefers-reduced-motion ════════════ */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
